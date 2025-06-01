@@ -77,15 +77,11 @@ def generate_agent_prompt(agent_data, world_state):
     prompt += f"\nYour current shelter level: {current_shelter_level} ({shelter_desc_for_prompt})."
 
     if agent_data.get('memory_log'):
-        # First, extract any recent messages from memory log
         recent_messages = [m for m in agent_data['memory_log'][-5:] if "said to you:" in m or "You said to" in m]
         other_memories = [m for m in agent_data['memory_log'][-3:] if "said to you:" not in m and "You said to" not in m]
 
-        # Show messages first for emphasis
         if recent_messages:
             prompt += f"\nRecent conversations:\n  " + "\n  ".join(recent_messages)
-
-        # Show other memories
         if other_memories:
             prompt += f"\nOther recent memories: {' | '.join(other_memories)}"
     else:
@@ -112,53 +108,52 @@ def generate_agent_prompt(agent_data, world_state):
             prompt += f"\n    {i+1}. ID: {need['need_id']} - {need['description']} (Urgency: {need['urgency']}, Progress: {progress_percent:.0f}%, Assigned: {assigned_count}){req_mats_str}"
 
     prompt += "\n\nRecent Happenings in the World:"
-    recent_events = world_state.get('events_log', [])[-3:] # Get last 3 events
+    recent_events = world_state.get('events_log', [])[-3:]
     if recent_events:
         for event_entry in recent_events:
             prompt += f"\n  - {event_entry}"
     else:
         prompt += "\n  - The days have been uneventful."
 
+    prompt += "\n\nPending Trade Proposals For You:"
+    my_pending_trades = [p for p in world_state.get('pending_trade_proposals', []) if p['target_id'] == agent_data['agent_id'] and p['status'] == 'pending']
+    if my_pending_trades:
+        for p_idx, p_trade in enumerate(my_pending_trades):
+            offered_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in p_trade['offered_by_proposer']])
+            requested_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in p_trade['requested_from_target']])
+            prompt += f"\n  {p_idx+1}. ID: {p_trade['proposal_id']}. From: {p_trade['proposer_name']}. They Offer: {offered_str}. They Want: {requested_str}."
+    else:
+        prompt += "\n  - None."
+
     prompt += "\n\nBeyond the immediate needs, what long-term improvements or goals could benefit you or the village? (e.g., better tools, more secure food sources, improved defenses, new discoveries). Consider these in your thought process."
 
-    # Hinting at available actions based on config
     prompt += "\n\n--- Consider Your Options ---"
     prompt += "\nAvailable Craftable Items (if you have materials & skill):"
     craftable_examples = []
-    # Show up to 3 examples, prioritizing items the agent might actually be able to craft or find useful
-    # This could be made smarter by checking agent's current resources against recipes
     shown_craft_examples = 0
     for item_id, item_def in config.CRAFTABLE_ITEMS.items():
-        if shown_craft_examples >= 3:
-            break
+        if shown_craft_examples >= 3: break
         recipe_str = ", ".join([f"{count} {mat.replace('_',' ')}" for mat, count in item_def['recipe'].items()])
         craftable_examples.append(f"- {item_def['name']} (ID: {item_id}): Needs {recipe_str}. Skill: {item_def['skill_required']} Lvl {item_def['min_skill_level']}. Desc: {item_def['description']}")
         shown_craft_examples +=1
 
-    if craftable_examples:
-        prompt += "\n" + "\n".join(craftable_examples)
-    else:
-        prompt += "\n  (No specific craftable items defined in config for examples right now)."
+    if craftable_examples: prompt += "\n" + "\n".join(craftable_examples)
+    else: prompt += "\n  (No specific craftable items defined in config for examples right now)."
 
     prompt += "\n\nPossible Personal Resources to Gather (check your skills):"
     gatherable_examples = []
     shown_gather_examples = 0
     for res_id, res_def in config.GATHERABLE_PERSONAL_RESOURCES.items():
-        if shown_gather_examples >= 3:
-            break
+        if shown_gather_examples >= 3: break
         gatherable_examples.append(f"- {res_id.replace('_',' ').capitalize()} (ID: {res_id}): Uses '{res_def['skill']}' skill.")
         shown_gather_examples += 1
-    if gatherable_examples:
-        prompt += "\n" + "\n".join(gatherable_examples)
-    else:
-        prompt += "\n  (No specific gatherable resources defined in config for examples right now)."
+    if gatherable_examples: prompt += "\n" + "\n".join(gatherable_examples)
+    else: prompt += "\n  (No specific gatherable resources defined in config for examples right now)."
 
-    # Remind about tool use
-    if agent_data.get("inventory", {}).get("stone_axe", 0) > 0: # Check quantity
+    if agent_data.get("inventory", {}).get("stone_axe", 0) > 0:
         prompt += "\nREMINDER: You have a Stone Axe, which is good for gathering wood!"
     if agent_data.get("inventory", {}).get("flint_knife", 0) > 0:
         prompt += "\nREMINDER: You have a Flint Knife, useful for gathering herbs or skinning."
-    # Add more reminders for other tools if present.
 
     prompt += """
 
@@ -214,7 +209,7 @@ PERSONAL_ACTION - Upgrade Shelter:
   "thought": "My current shelter (level 0) is just exposed ground. I need at least a lean-to (level 1). I should check if I have materials like wood scraps and herbs bundle from my personal resources.",
   "action_type": "PERSONAL_ACTION",
   "action_details": {
-    "activity": "upgrade_shelter", /* This activity is handled by agent_manager.py's old shelter logic */
+    "activity": "upgrade_shelter",
     "target_shelter_level": 1
   },
   "speech": "I need to build some basic shelter."
@@ -229,14 +224,13 @@ PERSONAL_ACTION - Rest:
 }
 
 ADDRESS_NEED - Contributing to a Village Need:
-(If gathering resources for a need, the allocation of those resources will be decided in a separate step if successful.)
 {
   "thought": "The village desperately needs food (N_Sys_001). My gathering skill is decent. I'll try to find edible plants.",
   "action_type": "ADDRESS_NEED",
   "action_details": {
-    "need_id": "N_Sys_001", /* Exact ID of the need. 'N_Sys_001' is a valid initial need. */
-    "activity_description": "Forage for edible plants and roots for the village stockpile.", /* What you are doing for the need */
-    "expected_contribution_skill": "gathering" /* Skill you are using */
+    "need_id": "N_Sys_001",
+    "activity_description": "Forage for edible plants and roots for the village stockpile.",
+    "expected_contribution_skill": "gathering"
   },
   "speech": "I'll search for food for everyone."
 }
@@ -246,9 +240,9 @@ ADDRESS_NEED - Using a tool (e.g. Stone Axe for a wood-related need):
   "thought": "Need ID N_Sys_002 requires wood. I have a stone_axe which will help me gather wood more effectively.",
   "action_type": "ADDRESS_NEED",
   "action_details": {
-    "need_id": "N_Sys_002", /* 'N_Sys_002' is a valid initial need. */
+    "need_id": "N_Sys_002",
     "activity_description": "Gather wood using my stone_axe for the village shelters.",
-    "expected_contribution_skill": "gathering" /* Or a more specific skill like 'woodcutting' if defined and relevant. 'stone_axe' is craftable. */
+    "expected_contribution_skill": "gathering"
   },
   "speech": "I'll use my axe to get wood for the shelters!"
 }
@@ -260,7 +254,7 @@ SOCIAL_ACTION - Propose New Need:
   "action_details": {
     "sub_type": "propose_new_need",
     "need_description": "Build a simple defensive palisade around the camp.",
-    "related_skills": ["building", "woodcutting"], /* Skills involved */
+    "related_skills": ["building", "woodcutting"],
     "urgency": "medium"
   },
   "speech": "Friends, I think we need to build a wall for safety!"
@@ -272,34 +266,92 @@ SOCIAL_ACTION - Make Statement to Agent:
   "action_type": "SOCIAL_ACTION",
   "action_details": {
     "sub_type": "make_statement_to_agent",
-    "target_agent_id": "agent_005", /* ID of the agent to talk to */
-    "target_description": "Gorok", /* Used if agent_id is unknown or invalid */
-    "statement_content": "You look exhausted. I know a recipe for healing tea if you'd like to try it." /* Optional, can use speech field instead */
+    "target_agent_id": "agent_005",
+    "target_description": "Gorok",
+    "statement_content": "You look exhausted. I know a recipe for healing tea if you'd like to try it."
   },
   "speech": "You look exhausted. I know a recipe for healing tea if you'd like to try it."
+}
+
+SOCIAL_ACTION - Give Item to Agent:
+{
+  "thought": "Kael seems to be struggling to find wood. I have some spare sturdy_branch.",
+  "action_type": "SOCIAL_ACTION",
+  "action_details": {
+    "sub_type": "give_item_to_agent",
+    "target_agent_id": "agent_004",
+    "item_id": "sturdy_branch",
+    "quantity": 2
+  },
+  "speech": "Here Kael, you can have these branches."
+}
+
+SOCIAL_ACTION - Give Item to Agent (Crafted Item):
+{
+  "thought": "Elara mentioned she was hungry. I have an extra food_ration.",
+  "action_type": "SOCIAL_ACTION",
+  "action_details": {
+    "sub_type": "give_item_to_agent",
+    "target_agent_id": "A001",
+    "item_id": "food_rations",
+    "quantity": 1
+  },
+  "speech": "Elara, I have some spare food if you need it."
+}
+
+SOCIAL_ACTION - Steal Item from Agent (Risky):
+{
+  "thought": "Gorok has a lot of wood, and I desperately need some for my shelter improvements. I'll try to take a few pieces when he's not looking. This is very risky, but I might get away with it if I'm careful.",
+  "action_type": "SOCIAL_ACTION",
+  "action_details": {
+    "sub_type": "steal_item_from_agent",
+    "target_agent_id": "agent_XXX",
+    "item_id": "sturdy_branch",
+    "quantity": 3
+  },
+  "speech": ""
+}
+
+SOCIAL_ACTION - Propose Trade:
+{
+  "thought": "I have extra sturdy_branch, and I need some food_rations. Maybe Elara will trade.",
+  "action_type": "SOCIAL_ACTION",
+  "action_details": {
+    "sub_type": "propose_trade",
+    "target_agent_id": "A001",
+    "items_offered": [{"item_id": "sturdy_branch", "quantity": 5}],
+    "items_requested": [{"item_id": "food_rations", "quantity": 1}]
+  },
+  "speech": "Elara, would you trade 1 food_ration for 5 of my sturdy_branches?"
+}
+
+SOCIAL_ACTION - Respond to Trade Proposal:
+{
+  "thought": "Gorok proposed a trade (ID: trade_agent_002_1234). He wants 2 flint_chip for 1 rope. That seems fair.",
+  "action_type": "SOCIAL_ACTION",
+  "action_details": {
+    "sub_type": "respond_to_trade",
+    "proposal_id": "trade_agent_002_1234",
+    "response": "accept"
+  },
+  "speech": "Yes Gorok, I accept that trade."
 }
 """
     return prompt
 
-def generate_resource_allocation_prompt(agent_data, newly_acquired_resource_type, newly_acquired_amount, world_state): # Added world_state
+def generate_resource_allocation_prompt(agent_data, newly_acquired_resource_type, newly_acquired_amount, world_state):
     """Generates the prompt for an agent to decide on resource allocation."""
     hunger_status_text = "You are hungry." if agent_data['status']['hunger'] > 50 else "Your hunger is manageable."
-
-    # Village resource status to help LLM make informed decision
     village_food_status = world_state['village_resources'].get('food', 0)
     village_wood_status = world_state['village_resources'].get('wood', 0)
-    # Add other key village resources if relevant to the type of resource acquired
-
     prompt = (
         f"You are {agent_data['name']}. Traits: {', '.join(agent_data.get('personality_traits',[]))}. "
         f"Remember, this is a fight for survival. {hunger_status_text}\n"
     )
-
     prompt += f"\nYou just successfully acquired {newly_acquired_amount} {newly_acquired_resource_type.replace('_', ' ')}."
     prompt += f"\nYour current personal inventory & resources: {format_inventory_for_prompt(agent_data.get('inventory', {}), agent_data.get('personal_resources',{}))}."
     prompt += f"\nYour current hunger: {agent_data['status']['hunger']}/100, energy: {agent_data['status']['energy']}/100."
     prompt += f"\nVillage stockpiles relevant to this resource: Food: {village_food_status}, Wood: {village_wood_status}."
-
     prompt += f"""
 
 How do you want to allocate these newly acquired {newly_acquired_resource_type.replace('_',' ')}?
@@ -309,8 +361,8 @@ Respond ONLY in JSON format with the following keys:
 {{
   "thought": "Your reasoning for this allocation, reflecting your traits, personal needs, and awareness of village supplies.",
   "allocation": {{
-    "personal_stash": How_many_units_to_keep_for_yourself, /* goes into your personal_resources */
-    "village_contribution": How_many_units_to_contribute_to_the_communal_stockpile /* goes to village_resources */
+    "personal_stash": How_many_units_to_keep_for_yourself,
+    "village_contribution": How_many_units_to_contribute_to_the_communal_stockpile
   }}
 }}
 
@@ -329,13 +381,12 @@ Example (if selfish/desperate and acquired 3 wood, and you need it for a persona
     return prompt
 
 if __name__ == '__main__':
-    # Updated sample agent to reflect new inventory/resource structure
     sample_agent_data = {
         "agent_id": "A001", "name": "Elara", "background": "Exiled Herbalist's Apprentice",
         "personality_traits": ["cautious", "observant", "generous", "desperate"],
         "skills": {"hunting": 1, "gathering": 4, "building": 1, "crafting": 3, "healing": 3, "social": 2, "fighting": 1},
         "status": {"health": 60, "hunger": 70, "energy": 40},
-        "inventory": {"flint_chip": 1, "food_rations": 1}, # Agent has 1 food_ration
+        "inventory": {"flint_chip": 1, "food_rations": 1},
         "personal_resources": {"sturdy_branch": 2, "healing_herbs": 5, "vine_rope": 1},
         "shelter_level": 0,
         "current_focus_need_id": None,
@@ -356,23 +407,26 @@ if __name__ == '__main__':
             "assigned_agents": ["A002"]
             }
             ],
-        "events_log": ["A wolf was heard howling nearby last night.", "The river seems higher than usual.", "A strange bird was seen flying south."]
+        "events_log": ["A wolf was heard howling nearby last night.", "The river seems higher than usual.", "A strange bird was seen flying south."],
+        "pending_trade_proposals": [
+            {
+                "proposal_id": "trade_B002_5555", "proposer_id": "B002", "proposer_name": "Bram",
+                "target_id": "A001", "target_name": "Elara",
+                "offered_by_proposer": [{"item_id": "flint_chip", "quantity": 3}],
+                "requested_from_target": [{"item_id": "healing_herbs", "quantity": 1}],
+                "status": "pending"
+            }
+        ]
     }
     print("--- Example Main Agent Prompt (Precision Focus with Shelter Example) ---")
-    # print(generate_agent_prompt(sample_agent_data, sample_world_state)) # Original print
-
-    # Test assertions for new prompt sections
     generated_prompt_output = generate_agent_prompt(sample_agent_data, sample_world_state)
-    print(generated_prompt_output) # Print the prompt so it's visible in output
+    print(generated_prompt_output)
 
     assert "Recent Happenings in the World:" in generated_prompt_output, "Test Failed: 'Recent Happenings' section missing."
-    # Check for one of the specific events from the sample data
     assert sample_world_state['events_log'][0] in generated_prompt_output, f"Test Failed: Sample event '{sample_world_state['events_log'][0]}' missing."
-    # If events_log could be shorter than 3, this assertion might need to be more robust
-    # For now, sample_world_state['events_log'] has 3 items, so [-3:] will include the first one.
-
     assert "Beyond the immediate needs, what long-term improvements or goals could benefit you or the village?" in generated_prompt_output, "Test Failed: Long-term goal encouragement missing."
-
+    assert "Pending Trade Proposals For You:" in generated_prompt_output, "Test Failed: Pending trades section missing."
+    assert "ID: trade_B002_5555. From: Bram. They Offer: 3 flint_chip. They Want: 1 healing_herbs." in generated_prompt_output, "Test Failed: Sample trade proposal missing or formatted incorrectly."
     print("\n\nSUCCESS: Prompt content assertions passed!")
 
     print("\n--- Example Resource Allocation Prompt (Precision Focus) ---")
