@@ -5,11 +5,11 @@ import config # To access CRAFTABLE_ITEMS and GATHERABLE_PERSONAL_RESOURCES
 def format_inventory_for_prompt(inventory_dict, personal_resources_dict):
     """Formats both inventory (tools/items) and personal resources for the prompt."""
     items_str_parts = []
-    
+
     # Crafted items/tools from inventory (which is a dict: {"item_id": count})
     if inventory_dict:
         crafted_items = []
-        for item_id, quantity in inventory_dict.items(): 
+        for item_id, quantity in inventory_dict.items():
             if quantity > 0:
                 # Get readable name from config if available, otherwise format item_id
                 item_name_cfg = config.CRAFTABLE_ITEMS.get(item_id, {})
@@ -17,7 +17,7 @@ def format_inventory_for_prompt(inventory_dict, personal_resources_dict):
                 crafted_items.append(f"{readable_name} (x{quantity})")
         if crafted_items:
             items_str_parts.append(f"Tools/Crafted Items: {', '.join(crafted_items)}")
-    
+
     # Raw personal resources
     if personal_resources_dict:
         raw_resources = []
@@ -34,7 +34,7 @@ def get_shelter_description_for_prompt(shelter_level):
     if shelter_level == 1: return "a crude lean-to"
     if shelter_level == 2: return "a basic hut"
     if shelter_level == 3: return "a sturdy hut"
-    if shelter_level >= 4: return "a well-built dwelling" 
+    if shelter_level >= 4: return "a well-built dwelling"
     return "an unknown shelter"
 
 
@@ -61,30 +61,30 @@ def generate_agent_prompt(agent_data, world_state):
         f"Failure to secure resources or protect yourself could mean death. "
         f"{hunger_status_text} {energy_status_text} {health_status_text} "
         f"Your current shelter is {shelter_desc_for_prompt}. "
-        f"Your personality traits are: {', '.join(agent_data.get('personality_traits',[]))}. " 
+        f"Your personality traits are: {', '.join(agent_data.get('personality_traits',[]))}. "
         f"Remember these traits and your dire situation when deciding your actions and speech.\n"
     )
 
     prompt += f"\nIt is Day {world_state['day']}, the weather is {world_state['weather']} during the {world_state['season']}."
     prompt += f"\nYour current raw status: Health {agent_data['status']['health']}/100, Hunger {agent_data['status']['hunger']}/100, Energy {agent_data['status']['energy']}/100."
-    
+
     skill_strings = []
-    for skill, value in agent_data.get('skills', {}).items(): 
+    for skill, value in agent_data.get('skills', {}).items():
         skill_strings.append(f"{skill.capitalize()}: {value}/{config.MAX_SKILL_LEVEL}")
     prompt += f"\nYour skills: {', '.join(skill_strings) if skill_strings else 'None listed'}."
-    
-    prompt += f"\nYour personal inventory & resources: {format_inventory_for_prompt(agent_data.get('inventory', {}), agent_data.get('personal_resources', {}))}." 
+
+    prompt += f"\nYour personal inventory & resources: {format_inventory_for_prompt(agent_data.get('inventory', {}), agent_data.get('personal_resources', {}))}."
     prompt += f"\nYour current shelter level: {current_shelter_level} ({shelter_desc_for_prompt})."
 
-    if agent_data.get('memory_log'): 
+    if agent_data.get('memory_log'):
         # First, extract any recent messages from memory log
         recent_messages = [m for m in agent_data['memory_log'][-5:] if "said to you:" in m or "You said to" in m]
         other_memories = [m for m in agent_data['memory_log'][-3:] if "said to you:" not in m and "You said to" not in m]
-        
+
         # Show messages first for emphasis
         if recent_messages:
             prompt += f"\nRecent conversations:\n  " + "\n  ".join(recent_messages)
-        
+
         # Show other memories
         if other_memories:
             prompt += f"\nOther recent memories: {' | '.join(other_memories)}"
@@ -94,10 +94,10 @@ def generate_agent_prompt(agent_data, world_state):
     prompt += "\n\nVillage Overview:"
     village_res_list = []
     for res, quant in world_state['village_resources'].items():
-        if quant > 0 : 
+        if quant > 0 :
              village_res_list.append(f"{res.replace('_',' ').capitalize()}: {quant}")
     prompt += f"\n  Communal Resources: {', '.join(village_res_list) if village_res_list else 'None available'}"
-    
+
     prompt += "\n  Active Village Needs:"
     if not world_state['active_needs']:
         prompt += "\n    - No pressing needs currently identified."
@@ -110,6 +110,16 @@ def generate_agent_prompt(agent_data, world_state):
                 mats = [f"{k.replace('_',' ')}: {v}" for k,v in need["required_materials"].items()]
                 req_mats_str = f" (Needs: {', '.join(mats)})"
             prompt += f"\n    {i+1}. ID: {need['need_id']} - {need['description']} (Urgency: {need['urgency']}, Progress: {progress_percent:.0f}%, Assigned: {assigned_count}){req_mats_str}"
+
+    prompt += "\n\nRecent Happenings in the World:"
+    recent_events = world_state.get('events_log', [])[-3:] # Get last 3 events
+    if recent_events:
+        for event_entry in recent_events:
+            prompt += f"\n  - {event_entry}"
+    else:
+        prompt += "\n  - The days have been uneventful."
+
+    prompt += "\n\nBeyond the immediate needs, what long-term improvements or goals could benefit you or the village? (e.g., better tools, more secure food sources, improved defenses, new discoveries). Consider these in your thought process."
 
     # Hinting at available actions based on config
     prompt += "\n\n--- Consider Your Options ---"
@@ -124,7 +134,7 @@ def generate_agent_prompt(agent_data, world_state):
         recipe_str = ", ".join([f"{count} {mat.replace('_',' ')}" for mat, count in item_def['recipe'].items()])
         craftable_examples.append(f"- {item_def['name']} (ID: {item_id}): Needs {recipe_str}. Skill: {item_def['skill_required']} Lvl {item_def['min_skill_level']}. Desc: {item_def['description']}")
         shown_craft_examples +=1
-        
+
     if craftable_examples:
         prompt += "\n" + "\n".join(craftable_examples)
     else:
@@ -142,7 +152,7 @@ def generate_agent_prompt(agent_data, world_state):
         prompt += "\n" + "\n".join(gatherable_examples)
     else:
         prompt += "\n  (No specific gatherable resources defined in config for examples right now)."
-    
+
     # Remind about tool use
     if agent_data.get("inventory", {}).get("stone_axe", 0) > 0: # Check quantity
         prompt += "\nREMINDER: You have a Stone Axe, which is good for gathering wood!"
@@ -170,11 +180,11 @@ Respond ONLY in JSON format like this:
 
 PERSONAL_ACTION - Craft Item:
 {
-  "thought": "I need a tool. I have the materials for a Stone Axe (1 sturdy_branch, 1 sharpened_stone, 1 vine_rope) and my crafting skill is adequate.",
+  "thought": "I need a tool. I have the materials for a Stone Axe (1 sturdy_branch, 1 sharpened_stone, 1 vine_rope) and my crafting skill is adequate. The recipe for stone_axe is: sturdy_branch: 1, sharpened_stone: 1, vine_rope: 1.",
   "action_type": "PERSONAL_ACTION",
   "action_details": {
-    "activity": "craft_item", 
-    "item_id": "stone_axe" /* Use EXACT item_id from config, e.g., 'stone_axe', 'basic_healing_salve', 'rope' */
+    "activity": "craft_item",
+    "item_id": "stone_axe" /* Use EXACT item_id from config. 'stone_axe' is valid and craftable. */
   }, "speech": "I will try to make an axe."
 }
 
@@ -184,7 +194,7 @@ PERSONAL_ACTION - Gather Personal Resource:
   "action_type": "PERSONAL_ACTION",
   "action_details": {
     "activity": "gather_resource",
-    "resource_id": "sturdy_branch" /* Use EXACT resource_id from config, e.g., 'sturdy_branch', 'healing_herbs', 'flint_chip' */
+    "resource_id": "sturdy_branch" /* Use EXACT resource_id from config. 'sturdy_branch' is valid and gatherable. */
   }, "speech": "Looking for some good branches."
 }
 
@@ -193,9 +203,9 @@ PERSONAL_ACTION - Eat from Inventory (Crafted Consumable or Basic Ration):
   "thought": "I'm very hungry and have 'food_rations' in my inventory. I must eat one.",
   "action_type": "PERSONAL_ACTION",
   "action_details": {
-    "activity": "eat_from_inventory", 
-    "consume_item": "food_rations", /* item_id from your inventory, e.g., 'food_rations', 'basic_healing_salve' */
-    "amount": 1 
+    "activity": "eat_from_inventory",
+    "consume_item": "food_rations", /* item_id from your inventory. 'food_rations' is a valid default initial inventory item. */
+    "amount": 1
   }, "speech": ""
 }
 
@@ -205,7 +215,7 @@ PERSONAL_ACTION - Upgrade Shelter:
   "action_type": "PERSONAL_ACTION",
   "action_details": {
     "activity": "upgrade_shelter", /* This activity is handled by agent_manager.py's old shelter logic */
-    "target_shelter_level": 1 
+    "target_shelter_level": 1
   },
   "speech": "I need to build some basic shelter."
 }
@@ -224,7 +234,7 @@ ADDRESS_NEED - Contributing to a Village Need:
   "thought": "The village desperately needs food (N_Sys_001). My gathering skill is decent. I'll try to find edible plants.",
   "action_type": "ADDRESS_NEED",
   "action_details": {
-    "need_id": "N_Sys_001", /* Exact ID of the need */
+    "need_id": "N_Sys_001", /* Exact ID of the need. 'N_Sys_001' is a valid initial need. */
     "activity_description": "Forage for edible plants and roots for the village stockpile.", /* What you are doing for the need */
     "expected_contribution_skill": "gathering" /* Skill you are using */
   },
@@ -236,9 +246,9 @@ ADDRESS_NEED - Using a tool (e.g. Stone Axe for a wood-related need):
   "thought": "Need ID N_Sys_002 requires wood. I have a stone_axe which will help me gather wood more effectively.",
   "action_type": "ADDRESS_NEED",
   "action_details": {
-    "need_id": "N_Sys_002",
+    "need_id": "N_Sys_002", /* 'N_Sys_002' is a valid initial need. */
     "activity_description": "Gather wood using my stone_axe for the village shelters.",
-    "expected_contribution_skill": "gathering" /* Or a more specific skill like 'woodcutting' if defined and relevant */
+    "expected_contribution_skill": "gathering" /* Or a more specific skill like 'woodcutting' if defined and relevant. 'stone_axe' is craftable. */
   },
   "speech": "I'll use my axe to get wood for the shelters!"
 }
@@ -274,7 +284,7 @@ SOCIAL_ACTION - Make Statement to Agent:
 def generate_resource_allocation_prompt(agent_data, newly_acquired_resource_type, newly_acquired_amount, world_state): # Added world_state
     """Generates the prompt for an agent to decide on resource allocation."""
     hunger_status_text = "You are hungry." if agent_data['status']['hunger'] > 50 else "Your hunger is manageable."
-    
+
     # Village resource status to help LLM make informed decision
     village_food_status = world_state['village_resources'].get('food', 0)
     village_wood_status = world_state['village_resources'].get('wood', 0)
@@ -288,8 +298,8 @@ def generate_resource_allocation_prompt(agent_data, newly_acquired_resource_type
     prompt += f"\nYou just successfully acquired {newly_acquired_amount} {newly_acquired_resource_type.replace('_', ' ')}."
     prompt += f"\nYour current personal inventory & resources: {format_inventory_for_prompt(agent_data.get('inventory', {}), agent_data.get('personal_resources',{}))}."
     prompt += f"\nYour current hunger: {agent_data['status']['hunger']}/100, energy: {agent_data['status']['energy']}/100."
-    prompt += f"\nVillage stockpiles relevant to this resource: Food: {village_food_status}, Wood: {village_wood_status}." 
-    
+    prompt += f"\nVillage stockpiles relevant to this resource: Food: {village_food_status}, Wood: {village_wood_status}."
+
     prompt += f"""
 
 How do you want to allocate these newly acquired {newly_acquired_resource_type.replace('_',' ')}?
@@ -324,32 +334,46 @@ if __name__ == '__main__':
         "agent_id": "A001", "name": "Elara", "background": "Exiled Herbalist's Apprentice",
         "personality_traits": ["cautious", "observant", "generous", "desperate"],
         "skills": {"hunting": 1, "gathering": 4, "building": 1, "crafting": 3, "healing": 3, "social": 2, "fighting": 1},
-        "status": {"health": 60, "hunger": 70, "energy": 40}, 
+        "status": {"health": 60, "hunger": 70, "energy": 40},
         "inventory": {"flint_chip": 1, "food_rations": 1}, # Agent has 1 food_ration
-        "personal_resources": {"sturdy_branch": 2, "healing_herbs": 5, "vine_rope": 1}, 
-        "shelter_level": 0, 
-        "current_focus_need_id": None, 
+        "personal_resources": {"sturdy_branch": 2, "healing_herbs": 5, "vine_rope": 1},
+        "shelter_level": 0,
+        "current_focus_need_id": None,
         "memory_log": ["Woke up shivering.", "Saw Gorok looking strong."]
     }
     sample_world_state = {
-        "day": 5, "season": "Spring", "weather": "Cold Rain", 
+        "day": 5, "season": "Spring", "weather": "Cold Rain",
         "village_resources": {"food": 20, "wood": 30, "stone": 10, "herbs":5, "healing_herbs": 3, "sturdy_branch": 5},
         "active_needs": [{
-            "need_id": "N_Sys_001", "description": "CRITICAL: Find food before we starve!", 
-            "urgency": "critical", "related_skills": ["gathering", "hunting"], "progress": 0.0, 
+            "need_id": "N_Sys_001", "description": "CRITICAL: Find food before we starve!",
+            "urgency": "critical", "related_skills": ["gathering", "hunting"], "progress": 0.0,
             "assigned_agents": []
             },
             {
-            "need_id": "N_Sys_002", "description": "Improve shelters", 
-            "urgency": "high", "related_skills": ["building", "crafting"], "progress": 0.1, 
+            "need_id": "N_Sys_002", "description": "Improve shelters",
+            "urgency": "high", "related_skills": ["building", "crafting"], "progress": 0.1,
             "required_materials": {"wood": 10, "vine_rope": 2},
             "assigned_agents": ["A002"]
             }
             ],
-        "events_log": ["A wolf was heard howling nearby last night."]
+        "events_log": ["A wolf was heard howling nearby last night.", "The river seems higher than usual.", "A strange bird was seen flying south."]
     }
     print("--- Example Main Agent Prompt (Precision Focus with Shelter Example) ---")
-    print(generate_agent_prompt(sample_agent_data, sample_world_state))
+    # print(generate_agent_prompt(sample_agent_data, sample_world_state)) # Original print
+
+    # Test assertions for new prompt sections
+    generated_prompt_output = generate_agent_prompt(sample_agent_data, sample_world_state)
+    print(generated_prompt_output) # Print the prompt so it's visible in output
+
+    assert "Recent Happenings in the World:" in generated_prompt_output, "Test Failed: 'Recent Happenings' section missing."
+    # Check for one of the specific events from the sample data
+    assert sample_world_state['events_log'][0] in generated_prompt_output, f"Test Failed: Sample event '{sample_world_state['events_log'][0]}' missing."
+    # If events_log could be shorter than 3, this assertion might need to be more robust
+    # For now, sample_world_state['events_log'] has 3 items, so [-3:] will include the first one.
+
+    assert "Beyond the immediate needs, what long-term improvements or goals could benefit you or the village?" in generated_prompt_output, "Test Failed: Long-term goal encouragement missing."
+
+    print("\n\nSUCCESS: Prompt content assertions passed!")
+
     print("\n--- Example Resource Allocation Prompt (Precision Focus) ---")
     print(generate_resource_allocation_prompt(sample_agent_data, "sturdy_branch", 3, sample_world_state))
-
