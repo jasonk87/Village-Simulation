@@ -1,0 +1,43 @@
+{
+  "agent_id": "agent_027",
+  "name": "Bram_1",
+  "background": "Mysterious Wanderer",
+  "personality_traits": [
+    "cautious",
+    "suspicious",
+    "lazy"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 2,
+    "building": 1,
+    "crafting": 1,
+    "healing": 5,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 9,
+    "energy": 94
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_47": 1,
+    "food_rations": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Allocated 1 food_rations to personal stash.",
+    "Contributed 1 food_rations to village (food).",
+    "Allocation thought: Mock: Decided to keep 1 and share 1 of the food_rations."
+  ]
+}

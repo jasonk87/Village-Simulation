@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_050",
+  "name": "Elowen_3",
+  "background": "Curious Youth Eager to Explore",
+  "personality_traits": [
+    "flexible",
+    "selfish",
+    "quiet"
+  ],
+  "skills": {
+    "hunting": 0,
+    "gathering": 1,
+    "building": 2,
+    "crafting": 3,
+    "healing": 3,
+    "social": 3
+  },
+  "status": {
+    "health": 100,
+    "hunger": 11,
+    "energy": 91
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_46": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Failed personal gathering."
+  ]
+}

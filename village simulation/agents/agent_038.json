@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_038",
+  "name": "Finnian",
+  "background": "Sole Survivor of a Natural Disaster",
+  "personality_traits": [
+    "stubborn",
+    "resourceful",
+    "cautious"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 1,
+    "building": 5,
+    "crafting": 2,
+    "healing": 0,
+    "social": 3
+  },
+  "status": {
+    "health": 100,
+    "hunger": 27,
+    "energy": 82
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_93": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 75.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 92.",
+    "Considered: A severe error occurred while trying to communicate. Details: 404 Client Error: Not Found for url: h",
+    "Said: \"The connection to the guiding voices is broken!\"",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Contributed 1 food_rations to village (food).",
+    "Allocation thought: Mock: Decided to keep 0 and share 1 of the food_rations."
+  ]
+}

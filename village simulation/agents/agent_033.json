@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_033",
+  "name": "Zara_1",
+  "background": "Curious Youth Eager to Explore",
+  "personality_traits": [
+    "trusting",
+    "quiet"
+  ],
+  "skills": {
+    "hunting": 2,
+    "gathering": 3,
+    "building": 1,
+    "crafting": 2,
+    "healing": 4,
+    "social": 0
+  },
+  "status": {
+    "health": 100,
+    "hunger": 4,
+    "energy": 94
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_12": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Ate from village stockpile. Hunger: 0.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Failed personal gathering."
+  ]
+}

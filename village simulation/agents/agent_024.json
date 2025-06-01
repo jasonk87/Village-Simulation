@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_024",
+  "name": "Gorok_1",
+  "background": "Injured Warrior Seeking Refuge",
+  "personality_traits": [
+    "methodical",
+    "loyal"
+  ],
+  "skills": {
+    "hunting": 4,
+    "gathering": 3,
+    "building": 0,
+    "crafting": 1,
+    "healing": 2,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 7,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_12": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Ate from village stockpile. Hunger: 0.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

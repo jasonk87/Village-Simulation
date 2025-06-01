@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_007",
+  "name": "Astrid",
+  "background": "Dreaming Shaman-in-Training",
+  "personality_traits": [
+    "loyal",
+    "curious",
+    "methodical"
+  ],
+  "skills": {
+    "hunting": 3,
+    "gathering": 1,
+    "building": 3,
+    "crafting": 2,
+    "healing": 1,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 11,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_5": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

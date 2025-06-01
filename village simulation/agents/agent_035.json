@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_035",
+  "name": "Brynn_1",
+  "background": "Skeptical Outcast",
+  "personality_traits": [
+    "curious",
+    "suspicious",
+    "flexible"
+  ],
+  "skills": {
+    "hunting": 2,
+    "gathering": 2,
+    "building": 2,
+    "crafting": 2,
+    "healing": 0,
+    "social": 4
+  },
+  "status": {
+    "health": 100,
+    "hunger": 11,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_49": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 81.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

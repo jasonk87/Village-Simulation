@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_042",
+  "name": "Jorn_1",
+  "background": "Resourceful Scavenger",
+  "personality_traits": [
+    "optimistic",
+    "curious",
+    "talkative"
+  ],
+  "skills": {
+    "hunting": 3,
+    "gathering": 1,
+    "building": 1,
+    "crafting": 1,
+    "healing": 2,
+    "social": 4
+  },
+  "status": {
+    "health": 100,
+    "hunger": 25,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_3": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

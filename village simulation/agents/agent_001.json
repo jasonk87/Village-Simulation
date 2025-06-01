@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_001",
+  "name": "Darian",
+  "background": "Sole Survivor of a Natural Disaster",
+  "personality_traits": [
+    "selfish",
+    "resourceful"
+  ],
+  "skills": {
+    "hunting": 2,
+    "gathering": 1,
+    "building": 2,
+    "crafting": 1,
+    "healing": 4,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 23,
+    "energy": 87
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_5": 1,
+    "food_rations": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 98.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Allocated 1 food_rations to personal stash.",
+    "Contributed 1 food_rations to village (food).",
+    "Allocation thought: Mock: Decided to keep 1 and share 1 of the food_rations."
+  ]
+}

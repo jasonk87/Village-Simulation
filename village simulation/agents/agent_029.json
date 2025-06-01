@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_029",
+  "name": "Gareth",
+  "background": "Traveling Merchant with Few Wares",
+  "personality_traits": [
+    "stubborn",
+    "generous"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 2,
+    "building": 2,
+    "crafting": 1,
+    "healing": 1,
+    "social": 5
+  },
+  "status": {
+    "health": 100,
+    "hunger": 7,
+    "energy": 82
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_80": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Ate from village stockpile. Hunger: 0.",
+    "Considered: A severe error occurred while trying to communicate. Details: 404 Client Error: Not Found for url: h",
+    "Said: \"The connection to the guiding voices is broken!\"",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Contributed 1 food_rations to village (food).",
+    "Allocation thought: Mock: Decided to keep 0 and share 1 of the food_rations."
+  ]
+}

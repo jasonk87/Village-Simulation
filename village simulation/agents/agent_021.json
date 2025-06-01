@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_021",
+  "name": "Willow_1",
+  "background": "Lost Child of a Noble Tribe",
+  "personality_traits": [
+    "flexible",
+    "talkative"
+  ],
+  "skills": {
+    "hunting": 0,
+    "gathering": 2,
+    "building": 5,
+    "crafting": 2,
+    "healing": 2,
+    "social": 1
+  },
+  "status": {
+    "health": 100,
+    "hunger": 10,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_34": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 97.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: A severe error occurred while trying to communicate. Details: 404 Client Error: Not Found for url: h",
+    "Said: \"The connection to the guiding voices is broken!\"",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

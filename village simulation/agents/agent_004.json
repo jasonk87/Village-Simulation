@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_004",
+  "name": "Bram",
+  "background": "Orphaned Farmhand",
+  "personality_traits": [
+    "quiet",
+    "stubborn",
+    "lazy"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 2,
+    "building": 2,
+    "crafting": 1,
+    "healing": 2,
+    "social": 4
+  },
+  "status": {
+    "health": 100,
+    "hunger": 12,
+    "energy": 85
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_26": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: A severe error occurred while trying to communicate. Details: 404 Client Error: Not Found for url: h",
+    "Said: \"The connection to the guiding voices is broken!\"",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Failed personal gathering."
+  ]
+}

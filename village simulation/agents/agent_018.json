@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_018",
+  "name": "Astrid_1",
+  "background": "Traveling Merchant with Few Wares",
+  "personality_traits": [
+    "optimistic",
+    "greedy"
+  ],
+  "skills": {
+    "hunting": 2,
+    "gathering": 3,
+    "building": 1,
+    "crafting": 0,
+    "healing": 2,
+    "social": 4
+  },
+  "status": {
+    "health": 100,
+    "hunger": 9,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_41": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 71.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 93.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

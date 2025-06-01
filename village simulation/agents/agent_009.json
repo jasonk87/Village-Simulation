@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_009",
+  "name": "Jasper",
+  "background": "Orphaned Farmhand",
+  "personality_traits": [
+    "flexible",
+    "impulsive"
+  ],
+  "skills": {
+    "hunting": 0,
+    "gathering": 2,
+    "building": 1,
+    "crafting": 4,
+    "healing": 3,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 13,
+    "energy": 91
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_55": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'll try to gather some food for myself, just in case.",
+    "Said: \"Going to forage for a bit.\"",
+    "Failed personal gathering."
+  ]
+}

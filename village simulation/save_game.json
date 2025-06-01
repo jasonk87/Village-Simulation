@@ -1,0 +1,861 @@
+{
+  "world_data": {
+    "day": 7,
+    "season": "Spring",
+    "weather": "Rainy",
+    "village_resources": {
+      "food": 148,
+      "wood": 84,
+      "stone": 40,
+      "herbs": 25,
+      "simple_tools": 3,
+      "sturdy_branch": 20,
+      "sharpened_stone": 10,
+      "vine_rope": 15,
+      "pointed_stone": 10,
+      "flat_stone": 5,
+      "grinding_stone": 5,
+      "heavy_branch": 10,
+      "stone_spearhead": 5,
+      "small_stones": 50,
+      "flexible_branch": 5,
+      "thin_stick": 30,
+      "bird_feathers": 20,
+      "animal_hide": 0,
+      "animal_fat": 0,
+      "clay_deposit": 0,
+      "reeds_grass": 30,
+      "healing_herbs": 10,
+      "bone_shard": 5
+    },
+    "active_needs": [
+      {
+        "need_id": "N_Sys_001",
+        "description": "Establish a more permanent source of food.",
+        "urgency": "high",
+        "related_skills": [
+          "hunting",
+          "gathering",
+          "fishing"
+        ],
+        "progress": 0.06,
+        "assigned_agents": [
+          "agent_017",
+          "agent_005",
+          "agent_006",
+          "agent_002",
+          "agent_011"
+        ]
+      }
+    ],
+    "events_log": [
+      "The survivors gathered, a new beginning uncertain.",
+      "Night falls on Day 1. Day 2 will soon dawn.",
+      "The weather changed to Windy.",
+      "Night falls on Day 2. Day 3 will soon dawn.",
+      "The weather changed to Rainy.",
+      "Night falls on Day 3. Day 4 will soon dawn.",
+      "The weather changed to Overcast.",
+      "Night falls on Day 4. Day 5 will soon dawn.",
+      "The weather changed to Sunny.",
+      "Night falls on Day 5. Day 6 will soon dawn.",
+      "Night falls on Day 6. Day 7 will soon dawn.",
+      "The weather changed to Rainy.",
+      "1 task(s) completed."
+    ]
+  },
+  "all_agents_data": {
+    "agent_001": {
+      "agent_id": "agent_001",
+      "name": "Rhys",
+      "background": "Resourceful Scavenger",
+      "personality_traits": [
+        "greedy",
+        "selfish",
+        "flexible",
+        "desperate"
+      ],
+      "skills": {
+        "hunting": 2,
+        "gathering": 5,
+        "building": 3,
+        "crafting": 1,
+        "healing": 0,
+        "social": 3,
+        "fighting": 0
+      },
+      "status": {
+        "health": 100,
+        "hunger": 4,
+        "energy": 63
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 7
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling hopeful.",
+        "Personally gathered 4 vine rope.",
+        "Personally gathered 3 vine rope."
+      ]
+    },
+    "agent_002": {
+      "agent_id": "agent_002",
+      "name": "Gideon",
+      "background": "Orphaned Farmhand",
+      "personality_traits": [
+        "methodical",
+        "trusting",
+        "brave"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 2,
+        "building": 2,
+        "crafting": 4,
+        "healing": 0,
+        "social": 0,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 22,
+        "energy": 61
+      },
+      "inventory": {
+        "food_rations": 2,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "wood": 2,
+        "sturdy_branch": 7
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_001",
+      "memory_log": [
+        "Woke up feeling determined.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Gained 3 wood. Deciding on allocation.",
+        "Allocation thought: Given the limited amount of wood and my current needs being manageable, I think it's reasonable to c",
+        "Allocated wood: 2 to self, 1 to village.",
+        "Personally gathered 4 sturdy branch.",
+        "Personally gathered 3 sturdy branch.",
+        "Focused on task: Forage for edible plants and roots for the village stockpile. (Need ID: N_Sys_001)"
+      ]
+    },
+    "agent_003": {
+      "agent_id": "agent_003",
+      "name": "Isolde",
+      "background": "Skeptical Outcast",
+      "personality_traits": [
+        "pragmatic",
+        "methodical"
+      ],
+      "skills": {
+        "hunting": 0,
+        "gathering": 3,
+        "building": 0,
+        "crafting": 2,
+        "healing": 4,
+        "social": 2,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 13,
+        "energy": 49
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 2 vine rope."
+      ]
+    },
+    "agent_004": {
+      "agent_id": "agent_004",
+      "name": "Corbin",
+      "background": "Skeptical Outcast",
+      "personality_traits": [
+        "desperate",
+        "pessimistic",
+        "suspicious",
+        "optimistic"
+      ],
+      "skills": {
+        "hunting": 5,
+        "gathering": 0,
+        "building": 3,
+        "crafting": 0,
+        "healing": 1,
+        "social": 4,
+        "fighting": 1
+      },
+      "status": {
+        "health": 100,
+        "hunger": 2,
+        "energy": 51
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 1
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_002",
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 1 sturdy branch.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means."
+      ]
+    },
+    "agent_005": {
+      "agent_id": "agent_005",
+      "name": "Kael",
+      "background": "Former Village Elder",
+      "personality_traits": [
+        "lazy",
+        "ambitious",
+        "stubborn",
+        "generous"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 2,
+        "building": 3,
+        "crafting": 0,
+        "healing": 1,
+        "social": 3,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 2,
+        "energy": 64
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 3,
+        "wood": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_002",
+      "memory_log": [
+        "Woke up feeling anxious.",
+        "Focused on task: Forage for edible plants and roots for the village stockpile. (Need ID: N_Sys_001)",
+        "Personally gathered 3 vine rope.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Gained 3 wood. Deciding on allocation.",
+        "Allocation thought: I'm feeling a bit peckish, but I don't want to give up my newfound resource just yet. I've got flint",
+        "Allocated wood: 2 to self, 1 to village."
+      ]
+    },
+    "agent_006": {
+      "agent_id": "agent_006",
+      "name": "Rhys_1",
+      "background": "Dreaming Shaman-in-Training",
+      "personality_traits": [
+        "talkative",
+        "quiet",
+        "lazy",
+        "flexible"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 3,
+        "building": 2,
+        "crafting": 5,
+        "healing": 2,
+        "social": 1,
+        "fighting": 0
+      },
+      "status": {
+        "health": 100,
+        "hunger": 1,
+        "energy": 50
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_001",
+      "memory_log": [
+        "Woke up feeling determined.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Personally gathered 2 vine rope.",
+        "Focused on task: Forage for edible plants and roots for the village stockpile. (Need ID: N_Sys_001)"
+      ]
+    },
+    "agent_007": {
+      "agent_id": "agent_007",
+      "name": "Clara",
+      "background": "Orphaned Farmhand",
+      "personality_traits": [
+        "observant",
+        "content",
+        "curious",
+        "impulsive"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 1,
+        "building": 4,
+        "crafting": 2,
+        "healing": 0,
+        "social": 1,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 8,
+        "energy": 66
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 1
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 1 vine rope."
+      ]
+    },
+    "agent_008": {
+      "agent_id": "agent_008",
+      "name": "Elowen",
+      "background": "Lost Child of a Noble Tribe",
+      "personality_traits": [
+        "methodical",
+        "optimistic"
+      ],
+      "skills": {
+        "hunting": 0,
+        "gathering": 1,
+        "building": 5,
+        "crafting": 1,
+        "healing": 3,
+        "social": 1,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 13,
+        "energy": 65
+      },
+      "inventory": {
+        "food_rations": 0,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 7
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 2 sturdy branch.",
+        "Personally gathered 3 sturdy branch.",
+        "Personally gathered 2 sturdy branch."
+      ]
+    },
+    "agent_009": {
+      "agent_id": "agent_009",
+      "name": "Leona",
+      "background": "Traveling Merchant with Few Wares",
+      "personality_traits": [
+        "greedy",
+        "curious"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 3,
+        "building": 4,
+        "crafting": 1,
+        "healing": 1,
+        "social": 2,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 4,
+        "energy": 61
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 6,
+        "wood": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_002",
+      "memory_log": [
+        "Woke up feeling determined.",
+        "Personally gathered 3 sturdy branch.",
+        "Personally gathered 3 sturdy branch.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Gained 3 wood. Deciding on allocation.",
+        "Allocation thought: I'm feeling a bit peckish and could use a small amount of food to fill the gap in my hunger, but the",
+        "Allocated wood: 2 to self, 1 to village."
+      ]
+    },
+    "agent_010": {
+      "agent_id": "agent_010",
+      "name": "Lenore",
+      "background": "Dreaming Shaman-in-Training",
+      "personality_traits": [
+        "talkative",
+        "resourceful",
+        "loyal",
+        "ruthless"
+      ],
+      "skills": {
+        "hunting": 2,
+        "gathering": 3,
+        "building": 1,
+        "crafting": 0,
+        "healing": 1,
+        "social": 3,
+        "fighting": 4
+      },
+      "status": {
+        "health": 100,
+        "hunger": 6,
+        "energy": 63
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 9
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling anxious.",
+        "Personally gathered 3 vine rope.",
+        "Personally gathered 3 vine rope.",
+        "Personally gathered 3 vine rope."
+      ]
+    },
+    "agent_011": {
+      "agent_id": "agent_011",
+      "name": "Zephyr",
+      "background": "Exiled Herbalist's Apprentice",
+      "personality_traits": [
+        "loyal",
+        "brave"
+      ],
+      "skills": {
+        "hunting": 5,
+        "gathering": 1,
+        "building": 1,
+        "crafting": 3,
+        "healing": 1,
+        "social": 1,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 12,
+        "energy": 72
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_001",
+      "memory_log": [
+        "Woke up feeling hopeful.",
+        "Personally gathered 2 vine rope.",
+        "Focused on task: Forage for edible plants and roots for the village stockpile. (Need ID: N_Sys_001)"
+      ]
+    },
+    "agent_012": {
+      "agent_id": "agent_012",
+      "name": "Brynn",
+      "background": "Aspiring Storyteller",
+      "personality_traits": [
+        "desperate",
+        "pragmatic",
+        "resourceful",
+        "lazy"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 2,
+        "building": 0,
+        "crafting": 2,
+        "healing": 5,
+        "social": 0,
+        "fighting": 4
+      },
+      "status": {
+        "health": 100,
+        "hunger": 6,
+        "energy": 61
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 3
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 3 sturdy branch."
+      ]
+    },
+    "agent_013": {
+      "agent_id": "agent_013",
+      "name": "Elara",
+      "background": "Escaped Captive",
+      "personality_traits": [
+        "methodical",
+        "brave",
+        "quiet",
+        "optimistic"
+      ],
+      "skills": {
+        "hunting": 2,
+        "gathering": 0,
+        "building": 3,
+        "crafting": 1,
+        "healing": 2,
+        "social": 3,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 8,
+        "energy": 52
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 1
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 1 sturdy branch."
+      ]
+    },
+    "agent_014": {
+      "agent_id": "agent_014",
+      "name": "Zara",
+      "background": "Disgraced Hunter",
+      "personality_traits": [
+        "talkative",
+        "impulsive",
+        "generous",
+        "resourceful"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 2,
+        "building": 4,
+        "crafting": 2,
+        "healing": 2,
+        "social": 0,
+        "fighting": 1
+      },
+      "status": {
+        "health": 100,
+        "hunger": 18,
+        "energy": 42
+      },
+      "inventory": {
+        "food_rations": 0,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 3
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling weary.",
+        "Personally gathered 3 vine rope."
+      ]
+    },
+    "agent_015": {
+      "agent_id": "agent_015",
+      "name": "Siona",
+      "background": "Former Village Elder",
+      "personality_traits": [
+        "observant",
+        "quiet",
+        "generous"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 1,
+        "building": 2,
+        "crafting": 0,
+        "healing": 4,
+        "social": 2,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 14,
+        "energy": 56
+      },
+      "inventory": {
+        "food_rations": 2,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "flint_chip": 7
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling anxious.",
+        "Personally gathered 1 flint chip.",
+        "Personally gathered 2 flint chip.",
+        "Personally gathered 4 flint chip."
+      ]
+    },
+    "agent_016": {
+      "agent_id": "agent_016",
+      "name": "Elowen_1",
+      "background": "Lost Child of a Noble Tribe",
+      "personality_traits": [
+        "optimistic",
+        "pessimistic"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 1,
+        "building": 3,
+        "crafting": 1,
+        "healing": 3,
+        "social": 3,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 12,
+        "energy": 59
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 1
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling determined.",
+        "Personally gathered 1 vine rope."
+      ]
+    },
+    "agent_017": {
+      "agent_id": "agent_017",
+      "name": "Terra",
+      "background": "Disgraced Hunter",
+      "personality_traits": [
+        "ruthless",
+        "pessimistic"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 2,
+        "building": 2,
+        "crafting": 4,
+        "healing": 2,
+        "social": 0,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 6,
+        "energy": 53
+      },
+      "inventory": {
+        "food_rations": 0,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {},
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_001",
+      "memory_log": [
+        "Woke up feeling determined.",
+        "Focused on task: Forage for edible plants and roots for the village stockpile. (Need ID: N_Sys_001)"
+      ]
+    },
+    "agent_018": {
+      "agent_id": "agent_018",
+      "name": "Ragnar",
+      "background": "Aspiring Storyteller",
+      "personality_traits": [
+        "quiet",
+        "pessimistic"
+      ],
+      "skills": {
+        "hunting": 3,
+        "gathering": 1,
+        "building": 3,
+        "crafting": 0,
+        "healing": 3,
+        "social": 3,
+        "fighting": 1
+      },
+      "status": {
+        "health": 100,
+        "hunger": 8,
+        "energy": 79
+      },
+      "inventory": {
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 2
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling hopeful.",
+        "Personally gathered 2 sturdy branch."
+      ]
+    },
+    "agent_019": {
+      "agent_id": "agent_019",
+      "name": "Anika",
+      "background": "Traveling Merchant with Few Wares",
+      "personality_traits": [
+        "stubborn",
+        "suspicious",
+        "pragmatic"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 3,
+        "building": 1,
+        "crafting": 3,
+        "healing": 2,
+        "social": 2,
+        "fighting": 2
+      },
+      "status": {
+        "health": 100,
+        "hunger": 8,
+        "energy": 47
+      },
+      "inventory": {
+        "food_rations": 0,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "sturdy_branch": 5,
+        "wood": 4
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": "N_Sys_002",
+      "memory_log": [
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Gained 3 wood. Deciding on allocation.",
+        "Allocation thought: Since I have enough food and don't need any more tools or trinkets, I'll keep the wood for my own pe",
+        "Allocated wood: 3 to self, 0 to village.",
+        "Focused on task: Gather wood using my stone_axe for the village shelters. (Need ID: N_Sys_002)",
+        "Gathered wood with basic means.",
+        "Gained 2 wood. Deciding on allocation.",
+        "Allocation thought: As someone who's not desperate yet and has managed my hunger, I think about the potential long-term ",
+        "Allocated wood: 1 to self, 1 to village."
+      ]
+    },
+    "agent_020": {
+      "agent_id": "agent_020",
+      "name": "Terra_1",
+      "background": "Exiled Herbalist's Apprentice",
+      "personality_traits": [
+        "selfish",
+        "observant"
+      ],
+      "skills": {
+        "hunting": 1,
+        "gathering": 4,
+        "building": 3,
+        "crafting": 1,
+        "healing": 0,
+        "social": 2,
+        "fighting": 3
+      },
+      "status": {
+        "health": 100,
+        "hunger": 10,
+        "energy": 71
+      },
+      "inventory": {
+        "food_rations": 1,
+        "flint_chip": 1,
+        "personal_trinket": 1
+      },
+      "personal_resources": {
+        "vine_rope": 11
+      },
+      "shelter_level": 0,
+      "current_focus_need_id": null,
+      "memory_log": [
+        "Woke up feeling anxious.",
+        "Personally gathered 3 vine rope.",
+        "Personally gathered 4 vine rope.",
+        "Personally gathered 4 vine rope."
+      ]
+    }
+  }
+}

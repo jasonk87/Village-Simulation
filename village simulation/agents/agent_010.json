@@ -1,0 +1,42 @@
+{
+  "agent_id": "agent_010",
+  "name": "Willow",
+  "background": "Skeptical Outcast",
+  "personality_traits": [
+    "methodical",
+    "suspicious",
+    "lazy"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 1,
+    "building": 4,
+    "crafting": 3,
+    "healing": 1,
+    "social": 2
+  },
+  "status": {
+    "health": 100,
+    "hunger": 10,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_100": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: No specific thought recorded.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}

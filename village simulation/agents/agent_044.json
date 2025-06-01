@@ -1,0 +1,41 @@
+{
+  "agent_id": "agent_044",
+  "name": "Elowen_2",
+  "background": "Dreaming Shaman-in-Training",
+  "personality_traits": [
+    "trusting",
+    "selfish"
+  ],
+  "skills": {
+    "hunting": 1,
+    "gathering": 2,
+    "building": 2,
+    "crafting": 1,
+    "healing": 3,
+    "social": 3
+  },
+  "status": {
+    "health": 100,
+    "hunger": 27,
+    "energy": 100
+  },
+  "inventory": {
+    "worn_pouch": 1,
+    "flint_chip": 1,
+    "dried_berries_x1": 1,
+    "personal_trinket_64": 1
+  },
+  "current_focus_need_id": null,
+  "memory_log": [
+    "Rested, energy now 72.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 88.",
+    "Considered: Mock: I need to rest.",
+    "Said: \"I think I'll rest for a bit.\"",
+    "Rested, energy now 100.",
+    "Considered: Mock: I'm tired and need to rest.",
+    "Said: \"Taking a break.\"",
+    "Rested, energy now 100."
+  ]
+}
