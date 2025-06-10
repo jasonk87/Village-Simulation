@@ -2,10 +2,23 @@ import curses
 import curses.ascii # For checking 'q'
 import heapq
 import collections
-import random # For random roaming
+import random
 import time
 
-# Node Representation
+# NPC Data Structure
+class Npc:
+    def __init__(self, id, y, x, char, color_pair_index):
+        self.id = id
+        self.y = y
+        self.x = x
+        self.char = char
+        self.color_pair_index = color_pair_index
+        self.target_y = None
+        self.target_x = None
+        self.path = []
+        self.is_idle = True
+
+# Node Representation (for A*)
 class Node:
     def __init__(self, position, parent=None, g=0, h=0):
         self.position = position
@@ -36,7 +49,7 @@ def reconstruct_path(current_node):
     return path[::-1]
 
 # A* Function
-def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles=['G', 'W', '@', 'T']): # 'T' for Target visualization
+def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles_map_chars=['G', 'W', 'T', ' ']):
     map_height = len(map_data)
     map_width = len(map_data[0])
 
@@ -66,8 +79,7 @@ def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles=['G', 'W', '@', 
 
             if not (0 <= neighbor_pos[0] < map_height and 0 <= neighbor_pos[1] < map_width):
                 continue
-            # Use the provided walkable_tiles list for A*
-            if map_data[neighbor_pos[0]][neighbor_pos[1]] not in walkable_tiles:
+            if map_data[neighbor_pos[0]][neighbor_pos[1]] not in walkable_tiles_map_chars:
                 continue
 
             neighbor_g = current_node.g + 1
@@ -87,76 +99,88 @@ def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles=['G', 'W', '@', 
     return None
 
 class GameState:
-    def __init__(self, map_data, npc_char, npc_y, npc_x):
-        self.map_data = map_data
-        self.npc_char = npc_char
-        self.npc_y = npc_y
-        self.npc_x = npc_x
-        self.npc_target_y = None
-        self.npc_target_x = None
-        self.npc_path = []
-        # Define walkable characters for AI logic
-        self.walkable_map_chars = ['G', 'W', 'T'] # '@' is where NPC is, 'T' is a generic target marker
+    def __init__(self, map_data_strings, npc_definitions):
+        self.map_data = []
+        self.npcs = []
+        self.walkable_map_chars = ['G', 'W', 'T', ' ']
+
+        npc_id_counter = 0
+        temp_map = [list(row_str) for row_str in map_data_strings]
+
+        for r, row_list in enumerate(temp_map):
+            for c, char_val in enumerate(row_list):
+                if char_val in npc_definitions:
+                    npc_def = npc_definitions[char_val]
+                    new_npc = Npc(
+                        id=npc_id_counter,
+                        y=r,
+                        x=c,
+                        char=char_val,
+                        color_pair_index=npc_def['color_pair_index']
+                    )
+                    self.npcs.append(new_npc)
+                    npc_id_counter += 1
+                    temp_map[r][c] = 'G'
+
+        self.map_data = ["".join(row_list) for row_list in temp_map]
 
 def draw_map(stdscr, game_state, color_pairs):
-    path_coords_set = set(game_state.npc_path) if game_state.npc_path else set()
-
     for r, row_str in enumerate(game_state.map_data):
         for c, char_val in enumerate(row_str):
-            color_pair_to_use = color_pairs['default']
+            color_pair_to_use = color_pairs.get('default', curses.color_pair(1))
             display_char = char_val
-            if char_val == 'G':
-                color_pair_to_use = color_pairs['grass']
-            elif char_val == 'W':
-                color_pair_to_use = color_pairs['water']
-            elif char_val == '#':
-                color_pair_to_use = color_pairs['wall']
-            elif char_val == 'T': # Target visualization
-                color_pair_to_use = color_pairs['target']
+            if char_val == 'G': color_pair_to_use = color_pairs.get('grass', curses.color_pair(1))
+            elif char_val == 'W': color_pair_to_use = color_pairs.get('water', curses.color_pair(1))
+            elif char_val == '#': color_pair_to_use = color_pairs.get('wall', curses.color_pair(1))
+            elif char_val == 'T': color_pair_to_use = color_pairs.get('target', curses.color_pair(1))
 
-            if (r, c) in path_coords_set and (r,c) != (game_state.npc_y, game_state.npc_x):
-                display_char = '.'
+            # Simple path viz for the first NPC if its path exists (can be enhanced for multiple NPCs)
+            if game_state.npcs:
+                # Example: visualize path of first NPC, or a specific NPC by ID
+                # For simplicity, just showing path for npc[0] if it exists
+                npc_to_viz_path = game_state.npcs[0]
+                if npc_to_viz_path.path and (r,c) in npc_to_viz_path.path:
+                     if (r,c) != (npc_to_viz_path.y, npc_to_viz_path.x) :
+                        display_char = '.'
 
+            try: stdscr.addch(r, c, display_char, color_pair_to_use)
+            except curses.error: pass
+
+    for npc in game_state.npcs:
+        try: stdscr.addch(npc.y, npc.x, npc.char, curses.color_pair(npc.color_pair_index))
+        except curses.error: pass
+
+    # Display status for a few NPCs for simple debugging
+    for i, npc_to_display in enumerate(game_state.npcs[:2]): # Display for first 2 NPCs
+        if npc_to_display.target_y is not None:
             try:
-                stdscr.addch(r, c, display_char, color_pair_to_use)
-            except curses.error:
-                pass
-
-    try:
-        stdscr.addch(game_state.npc_y, game_state.npc_x, game_state.npc_char, color_pairs['npc'])
-    except curses.error:
-        pass
-
-    if game_state.npc_target_y is not None:
-        try:
-            # Display current target and path length for debugging
-            # Ensure this string doesn't exceed screen width
-            status_msg = f"Target:({game_state.npc_target_y},{game_state.npc_target_x}) Path:{len(game_state.npc_path)}"
-            stdscr.addstr(len(game_state.map_data), 0, status_msg[:curses.COLS-1])
-        except curses.error:
-            pass
+                status_msg = f"NPC{npc_to_display.id} T:({npc_to_display.target_y},{npc_to_display.target_x}) P:{len(npc_to_display.path)}"
+                stdscr.addstr(len(game_state.map_data) + i, 0, status_msg[:curses.COLS-1])
+            except curses.error: pass
 
 
 def main(stdscr):
     curses.curs_set(0)
     curses.start_color()
+
     color_pairs = {
         'default': curses.color_pair(1), 'grass': curses.color_pair(2),
-        'water': curses.color_pair(3), 'npc': curses.color_pair(4),
-        'wall': curses.color_pair(5), 'target': curses.color_pair(6)
+        'water': curses.color_pair(3), 'npc_yellow': curses.color_pair(4), # Used by ID 4
+        'wall': curses.color_pair(5), 'target': curses.color_pair(6),
+        'npc_cyan': curses.color_pair(7) # Used by ID 7
     }
     curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
     curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
     curses.init_pair(3, curses.COLOR_BLUE, curses.COLOR_BLACK)
-    curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK) # NPC
-    curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)   # Wall
-    curses.init_pair(6, curses.COLOR_RED, curses.COLOR_BLACK)    # Target 'T'
+    curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+    curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)
+    curses.init_pair(6, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(7, curses.COLOR_CYAN, curses.COLOR_BLACK)
 
-    # Using a slightly modified map for better testing of random roaming
-    initial_map_data = [
+    initial_map_data_strings = [
         "####################",
-        "#G@GGGGGGGGGGGGGGGT#", # NPC start, T is a potential target spot
-        "#G################G#",
+        "#G@GGGGGGGGGGGGGGGT#",
+        "#G#####%##########G#",
         "#G#GGGGGGGGGGGGGG#G#",
         "#G#G###########G#G#",
         "#G#G#GGGGGGG#G#G#G#",
@@ -167,117 +191,112 @@ def main(stdscr):
         "####################"
     ]
 
-    npc_initial_y, npc_initial_x = 1, 2
-    for r, row in enumerate(initial_map_data):
-        if '@' in row:
-            npc_initial_y, npc_initial_x = r, row.find('@')
-            map_list = list(row)
-            map_list[npc_initial_x] = 'G'
-            initial_map_data[r] = "".join(map_list)
-            break
+    npc_definitions_on_map = {
+        '@': {'color_pair_index': 4},
+        '%': {'color_pair_index': 7}
+    }
 
-    game_state = GameState(map_data=initial_map_data, npc_char='@', npc_y=npc_initial_y, npc_x=npc_initial_x)
+    game_state = GameState(map_data_strings=initial_map_data_strings,
+                           npc_definitions=npc_definitions_on_map)
 
-    # Initial target can be None to trigger random roaming, or set one for initial movement.
-    # game_state.npc_target_y, game_state.npc_target_x = 1, 18 # Example: 'T' on the map
+    all_walkable_coords = []
+    for r, row_str in enumerate(game_state.map_data):
+        for c, char_val in enumerate(row_str):
+            if char_val in game_state.walkable_map_chars:
+                all_walkable_coords.append((r,c))
 
     stdscr.nodelay(True)
     loop_counter = 0
-    # Define walkable characters for A* to include generic targets like 'T' if used on map
-    astar_walkable_tiles = game_state.walkable_map_chars + [game_state.npc_char]
-
+    astar_walkable_map_tiles = game_state.walkable_map_chars
+    NPC_MOVE_FREQUENCY = 3 # Move NPC every N game loops
 
     while True:
         stdscr.clear()
-
-        # 1. Identify Idle State & 2. Implement Random Target Selection
-        if game_state.npc_target_y is None and not game_state.npc_path:
-            print("NPC is idle, selecting new random target...") # For non-curses debugging
-            walkable_tiles_coords = []
-            for r, row_str in enumerate(game_state.map_data):
-                for c, char_val in enumerate(row_str):
-                    if char_val in game_state.walkable_map_chars: # Use GameState's definition
-                        # Ensure NPC doesn't target its own current spot if it's the only option
-                        if (r,c) != (game_state.npc_y, game_state.npc_x):
-                             walkable_tiles_coords.append((r, c))
-
-            if not walkable_tiles_coords and (game_state.npc_y, game_state.npc_x) not in walkable_tiles_coords:
-                 # Only current spot is walkable, or no walkable spots at all (edge case)
-                 # Add current spot back if it was excluded and is the only option.
-                 current_tile_char = game_state.map_data[game_state.npc_y][game_state.npc_x]
-                 if current_tile_char in game_state.walkable_map_chars:
-                     walkable_tiles_coords.append((game_state.npc_y, game_state.npc_x))
-
-            if walkable_tiles_coords:
-                new_target_y, new_target_x = random.choice(walkable_tiles_coords)
-                game_state.npc_target_y = new_target_y
-                game_state.npc_target_x = new_target_x
-                print(f"NPC new random target: ({game_state.npc_target_y}, {game_state.npc_target_x})")
-            else:
-                print("No walkable tiles found for random target.") # Should not happen with current map
-
-        # Path Calculation (if target is set and no path)
-        if game_state.npc_target_y is not None and not game_state.npc_path:
-            path = astar_pathfind(game_state.map_data,
-                                  (game_state.npc_y, game_state.npc_x),
-                                  (game_state.npc_target_y, game_state.npc_target_x),
-                                  astar_walkable_tiles)
-            if path:
-                game_state.npc_path = path
-                print(f"Path found to ({game_state.npc_target_y},{game_state.npc_target_x}): {game_state.npc_path}")
-                if game_state.npc_path and game_state.npc_path[0] == (game_state.npc_y, game_state.npc_x):
-                    game_state.npc_path.pop(0)
-            else:
-                print(f"No path found to target ({game_state.npc_target_y},{game_state.npc_target_x}). Clearing target.")
-                game_state.npc_target_y = None
-                game_state.npc_target_x = None
-
-        # Movement Along Path
         loop_counter += 1
-        if loop_counter % 3 == 0:
-            if game_state.npc_path:
-                next_step = game_state.npc_path.pop(0)
-                game_state.npc_y, game_state.npc_x = next_step
 
-                if (game_state.npc_y, game_state.npc_x) == (game_state.npc_target_y, game_state.npc_target_x):
-                    print(f"NPC reached target at ({game_state.npc_y}, {game_state.npc_x}).")
-                    game_state.npc_target_y = None
-                    game_state.npc_target_x = None
-                    game_state.npc_path = []
+        for npc in game_state.npcs:
+            # AI Decision Logic (Target Selection)
+            if npc.target_y is None and not npc.path:
+                npc.is_idle = True
+
+            if npc.is_idle:
+                if all_walkable_coords:
+                    possible_targets = [coord for coord in all_walkable_coords if coord != (npc.y, npc.x)]
+                    if not possible_targets: possible_targets = all_walkable_coords
+                    if possible_targets:
+                        new_target_y, new_target_x = random.choice(possible_targets)
+                        npc.target_y = new_target_y
+                        npc.target_x = new_target_x
+                        npc.is_idle = False
+                        print(f"NPC {npc.id} ({npc.char}) new random target: ({npc.target_y}, {npc.target_x})")
+                else:
+                    print(f"NPC {npc.id} ({npc.char}): No walkable_coords for random target.")
+
+            # Path Calculation Logic (Per-NPC)
+            if npc.target_y is not None and not npc.path and not npc.is_idle:
+                calculated_path = astar_pathfind(game_state.map_data,
+                                                 (npc.y, npc.x),
+                                                 (npc.target_y, npc.target_x),
+                                                 astar_walkable_map_tiles)
+                if calculated_path:
+                    npc.path = calculated_path
+                    print(f"Path found for NPC {npc.id} ({npc.char}) to ({npc.target_y},{npc.target_x}): {npc.path}")
+                    if npc.path and npc.path[0] == (npc.y, npc.x): # Remove current pos if A* includes it
+                        npc.path.pop(0)
+                else:
+                    print(f"No path for NPC {npc.id} ({npc.char}) to target ({npc.target_y},{npc.target_x}). Clearing target.")
+                    npc.target_y = None
+                    npc.target_x = None
+                    npc.is_idle = True
+
+            # Movement Logic (Per-NPC)
+            if loop_counter % NPC_MOVE_FREQUENCY == 0:
+                if npc.path: # Check current NPC's path
+                    next_y, next_x = npc.path.pop(0) # Get and remove first step
+                    # Basic collision check with other NPCs (simple version: if target tile is occupied by another NPC, wait)
+                    # This can be improved with more sophisticated collision avoidance.
+                    is_next_step_occupied_by_other_npc = False
+                    for other_npc in game_state.npcs:
+                        if other_npc.id != npc.id and other_npc.y == next_y and other_npc.x == next_x:
+                            is_next_step_occupied_by_other_npc = True
+                            npc.path.insert(0, (next_y, next_x)) # Re-add step, try again next time
+                            print(f"NPC {npc.id} ({npc.char}) path blocked by NPC {other_npc.id} at ({next_y},{next_x}). Waiting.")
+                            break
+
+                    if not is_next_step_occupied_by_other_npc:
+                        npc.y = next_y
+                        npc.x = next_x
+                        # print(f"NPC {npc.id} ({npc.char}) moved to ({npc.y},{npc.x})") # Optional: can be verbose
+
+                    # Arrival Check (after moving)
+                    if npc.target_y is not None and (npc.y, npc.x) == (npc.target_y, npc.target_x):
+                        print(f"NPC {npc.id} ({npc.char}) reached target at ({npc.y}, {npc.x}).")
+                        npc.target_y = None
+                        npc.target_x = None
+                        npc.path = [] # Path is now empty or should be cleared
+                        npc.is_idle = True
+                    elif not npc.path and npc.target_y is not None: # Path ended but not at target
+                        print(f"NPC {npc.id} ({npc.char}) path ended but not at target. Current:({npc.y},{npc.x}), Target:({npc.target_y},{npc.target_x}). Recalculating.")
+                        # Clear target to force recalc or just path, for now clear path to recalc
+                        npc.is_idle = False # Force path recalculation next cycle
+                        # No, if path is empty and not at target, it implies path was bad or target became unreachable
+                        # Set to idle to pick a new target if it's not immediately trying to repath to same target.
+                        # For now, let path calculation logic handle this: if target still set, it will try again.
+                        # If target was blocked, pathfinding should fail and then it becomes idle.
+                        pass
+
 
         draw_map(stdscr, game_state, color_pairs)
         stdscr.refresh()
-        curses.napms(100) # Game speed
+        curses.napms(100)
 
         key = stdscr.getch()
-
         if key != curses.ERR:
             if key == ord('q') or key == curses.ascii.ESC:
                 break
-
-            # Player control only if NPC has no AI target (i.e., not actively pursuing a random target)
-            if game_state.npc_target_y is None:
-                new_npc_y, new_npc_x = game_state.npc_y, game_state.npc_x
-                if key == curses.KEY_UP: new_npc_y -= 1
-                elif key == curses.KEY_DOWN: new_npc_y += 1
-                elif key == curses.KEY_LEFT: new_npc_x -= 1
-                elif key == curses.KEY_RIGHT: new_npc_x += 1
-
-                map_height = len(game_state.map_data)
-                map_width = len(game_state.map_data[0])
-                current_tile_char = game_state.map_data[new_npc_y][new_npc_x] if (0 <= new_npc_y < map_height and 0 <= new_npc_x < map_width) else '#'
-
-                if 0 <= new_npc_y < map_height and \
-                   0 <= new_npc_x < map_width and \
-                   current_tile_char != '#': # Check against map walls
-                    game_state.npc_y, game_state.npc_x = new_npc_y, new_npc_x
-                    game_state.npc_path = [] # Clear AI path if player moves NPC manually
-                    print(f"NPC moved by player to: ({game_state.npc_y}, {game_state.npc_x})")
-
+            # Player control logic can be added here for a specific NPC if needed
 
 if __name__ == "__main__":
-    # Wrap a try-except to catch potential curses errors during development
-    # and print them if curses.wrapper doesn't handle them cleanly for stdout.
     try:
         curses.wrapper(main)
     except Exception as e:
@@ -285,10 +304,6 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
     finally:
-        # Ensure terminal is reset if wrapper didn't exit cleanly (though wrapper should handle this)
-        # This is more of a safeguard during development if wrapper itself errors out.
-        try:
-            curses.endwin()
-        except: # nosemgrep: bare-except
-            pass # endwin may fail if curses never initialized
-        print("Game ended.") # This will print after curses has ended.
+        try: curses.endwin()
+        except: pass
+        print("Game ended.")
