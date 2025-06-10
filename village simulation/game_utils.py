@@ -27,7 +27,7 @@ def get_status_description(agent_data):
     elif 40 <= energy < 70: energy_desc = "Fatigued"
     elif 1 <= energy < 40: energy_desc = "Exhausted"
     elif energy <=0: energy_desc = "Collapsed"
-    
+
     if health <= 0: return "Deceased"
     return f"{health_desc}, {hunger_desc}, {energy_desc}"
 
@@ -50,7 +50,7 @@ def perform_skill_check(skill_value, difficulty=3, tool_bonus=0):
     # Chance of success increases with skill.
     # Base success chance could be (skill_value + tool_bonus) * 15% + random element vs difficulty.
     # For now, keeping it simple:
-    roll = random.randint(1, 10) 
+    roll = random.randint(1, 10)
     # Effective skill is skill_value + tool_bonus
     # Target number to beat on d10. Lower is better for agent.
     # Let's say 5 is a neutral difficulty.
@@ -63,7 +63,7 @@ def perform_skill_check(skill_value, difficulty=3, tool_bonus=0):
     # Skill 4: needs 4+
     # Skill 5: needs 3+
     # Adjust this by difficulty (e.g. +1 to roll needed per difficulty point above 3, -1 per below 3)
-    
+
     required_roll = max(3, 8 - (skill_value + tool_bonus)) # Base roll needed
     required_roll += (difficulty - 3) # Adjust for task difficulty (3 is neutral)
     required_roll = max(1, min(10, required_roll)) # Clamp between 1 and 10
@@ -90,30 +90,6 @@ def convert_inventory_to_dict_format(inventory_data):
             new_inventory[item_key] = new_inventory.get(item_key, 0) + 1
         return new_inventory
     return {}
-
-if __name__ == '__main__':
-    # Test get_status_description
-    test_agent_status = {"health": 100, "hunger": 10, "energy": 80}
-    print(f"Status (100,10,80): {get_status_description({'status': test_agent_status})}")
-    test_agent_status = {"health": 50, "hunger": 60, "energy": 30}
-    print(f"Status (50,60,30): {get_status_description({'status': test_agent_status})}")
-    test_agent_status = {"health": 0, "hunger": 90, "energy": 0}
-    print(f"Status (0,90,0): {get_status_description({'status': test_agent_status})}")
-
-    # Test perform_skill_check
-    print("\nSkill Check Examples (Skill 3, Difficulty 3):")
-    successes = 0
-    for _ in range(10):
-        if perform_skill_check(skill_value=3, difficulty=3):
-            successes +=1
-    print(f"  Successes: {successes}/10")
-
-    print("Skill Check Examples (Skill 1, Difficulty 4):")
-    successes = 0
-    for _ in range(10):
-        if perform_skill_check(skill_value=1, difficulty=4):
-            successes +=1
-    print(f"  Successes: {successes}/10")
 
 if __name__ == '__main__':
     # Test get_status_description

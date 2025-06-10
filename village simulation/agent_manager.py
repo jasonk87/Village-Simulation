@@ -208,7 +208,7 @@ def handle_agent_resource_allocation(agent_data, world_state, resource_type, amo
         
     return narration
 
-def process_agent_turn(
+async def process_agent_turn(
     agent_data,
     world_data,
     all_agents_data,

@@ -5,7 +5,7 @@ DEBUG_MODE = True  # Set to True for verbose output during development
 
 # --- Simulation Parameters ---
 SIM_DAYS_TO_RUN = 7
-USE_MOCK_LLM = False 
+USE_MOCK_LLM = True
 AGENT_DATA_PATH = "agents" 
 WORLD_STATE_FILE = "world_state.json" 
 SAVE_GAME_FILE = "save_game.json" 
