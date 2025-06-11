@@ -34,7 +34,89 @@ def _get_equipped_item_effects(agent_data, action_type=None, target_resource=Non
                 if item_properties.get("item_category") == "weapon" and action_type == "combat":
                     if effect.get("type") == "combat_damage": is_relevant = True
                 if is_relevant: applicable_effects.append(effect)
+    applicable_effects = []
+    inventory = agent_data.get("inventory")
+    if not isinstance(inventory, dict):
+        return applicable_effects
+
+    for item_id, quantity in inventory.items():
+        if quantity <= 0:
+            continue
+
+        item_def = config.CRAFTABLE_ITEMS.get(item_id)
+        if not item_def:
+            continue
+
+        item_properties = item_def.get("properties", {})
+        item_category = item_properties.get("item_category")
+        tool_type = item_properties.get("tool_type")
+
+        for effect in item_properties.get("effects", []):
+            condition = effect.get("condition", "equipped")
+            effect_type = effect.get("type")
+            effect_action = effect.get("action")
+            effect_resource = effect.get("resource")
+            is_relevant = False
+
+            if condition == "equipped": # Assuming all items in inventory are "equipped" for effect purposes
+                if effect_type == "gathering_yield" and effect_resource == target_resource:
+                    # General gathering yield, or specific tool match
+                    if item_category == "tool":
+                        if (tool_type == "axe" and action_type == "gather_wood") or \
+                           (tool_type == "knife" and action_type == "gather_herbs") or \
+                           (not tool_type and action_type): # Generic tool for any specified action
+                             is_relevant = True
+                    elif not tool_type: # Non-tool item that gives general gathering bonus for the resource
+                        is_relevant = True
+                elif effect_type == "action_energy_modifier" and effect_action == action_type:
+                    is_relevant = True
+                elif item_category == "weapon" and action_type == "combat" and effect_type == "combat_damage":
+                    is_relevant = True
+
+            if is_relevant:
+                applicable_effects.append(effect)
+
     return applicable_effects
+
+# --- Resource Gathering Helper ---
+async def _perform_gather_resource(agent_data, resource_to_gather, skill_level, base_difficulty, base_yield_range,
+                                   action_type_for_effects, is_for_need, world_data, all_agents_data,
+                                   llm_caller, prompt_generator_allocation_func, activity_desc_override=None):
+    """
+    Handles the logic for gathering a specific resource.
+    Returns a narration string of the outcome.
+    """
+    tool_effects = _get_equipped_item_effects(agent_data, action_type_for_effects, resource_to_gather)
+    yield_bonus_flat = 0
+    activity_description = activity_desc_override or f"gathering {resource_to_gather.replace('_', ' ')}"
+
+    for effect in tool_effects:
+        if effect.get("type") == "gathering_yield" and effect.get("resource") == resource_to_gather:
+            yield_bonus_flat += effect.get("bonus_flat", 0)
+
+    if yield_bonus_flat > 0:
+        add_memory_log(agent_data, f"Used a tool, improving {resource_to_gather} gathering.")
+        activity_description += " (using a tool)"
+    else:
+        add_memory_log(agent_data, f"Gathered {resource_to_gather} with basic means.")
+
+    if game_utils.perform_skill_check(skill_level, difficulty=base_difficulty):
+        amount_gained = random.randint(base_yield_range[0], base_yield_range[1]) + (skill_level // 2) + yield_bonus_flat
+        amount_gained = max(0, amount_gained)
+
+        if amount_gained > 0:
+            if is_for_need:
+                allocation_narration = await _decide_and_allocate_resources(agent_data, resource_to_gather, amount_gained, world_data, all_agents_data, llm_caller, prompt_generator_allocation_func)
+                return f"{agent_data['name']} diligently {activity_description}, acquiring {amount_gained} {resource_to_gather}. They {allocation_narration}", amount_gained
+            else: # Personal gathering
+                agent_data["personal_resources"].setdefault(resource_to_gather, 0)
+                agent_data["personal_resources"][resource_to_gather] += amount_gained
+                add_memory_log(agent_data, f"Personally gathered {amount_gained} {resource_to_gather.replace('_',' ')}.")
+                return f"{agent_data['name']} foraged and found {amount_gained} {resource_to_gather.replace('_',' ')}, adding it to their personal supply.", amount_gained
+        else:
+            return f"{agent_data['name']} searched for {resource_to_gather.replace('_',' ')} but found none this time.", 0
+    else:
+        return f"{agent_data['name']} attempted to {activity_description} but failed to gather any significant {resource_to_gather}.", 0
 
 async def _decide_and_allocate_resources(agent_data, resource_type, amount_gained, world_data, all_agents_data, llm_caller, prompt_generator_func):
     add_memory_log(agent_data, f"Gained {amount_gained} {resource_type}. Deciding on allocation.")
@@ -85,17 +167,50 @@ async def _decide_and_allocate_resources(agent_data, resource_type, amount_gaine
     elif actual_contributed > 0: return f"contributed all {actual_contributed} {resource_type} to the village stockpile."
     return f"gained {amount_gained} {resource_type} but didn't allocate any (or gained 0)."
 
-def _validate_and_get_item_source(agent_data, item_id, quantity):
-    """Checks if agent has item_id in quantity, returns source ('personal_resources' or 'inventory') or None."""
-    if not item_id or quantity <= 0: return None # Basic validation
-    if item_id in agent_data.get("personal_resources", {}) and agent_data["personal_resources"][item_id] >= quantity:
+def _validate_and_get_item_source(agent_data: dict, item_id: str, quantity: int) -> str | None:
+    """
+    Checks if the agent possesses the specified item in the given quantity.
+    Returns the source ('personal_resources' or 'inventory') if found, otherwise None.
+
+    Args:
+        agent_data: The agent's data dictionary.
+        item_id: The ID of the item to check.
+        quantity: The required quantity of the item.
+
+    Returns:
+        A string indicating the source location ("personal_resources" or "inventory")
+        if the item is found in sufficient quantity, otherwise None.
+    """
+    if not item_id or quantity <= 0:  # Basic validation
+        return None
+
+    # Check personal_resources first (e.g., raw materials)
+    if item_id in agent_data.get("personal_resources", {}) and \
+       agent_data["personal_resources"][item_id] >= quantity:
         return "personal_resources"
-    elif item_id in agent_data.get("inventory", {}) and agent_data["inventory"][item_id] >= quantity:
+
+    # Then check inventory (e.g., crafted items, tools)
+    if item_id in agent_data.get("inventory", {}) and \
+       agent_data["inventory"][item_id] >= quantity:
         return "inventory"
+
     return None
 
 def _transfer_items_for_trade(proposer_agent, responder_agent, proposal, world_data): # Added world_data for event logging
     """Transfers items as per the accepted proposal. Assumes pre-validation of items. Returns True if successful."""
+
+    # Helper sub-function to handle item movement for one side of the trade
+    def _move_item_stack(from_agent, to_agent, item_id, quantity_to_move, item_source_location):
+        from_agent[item_source_location][item_id] -= quantity_to_move
+        if from_agent[item_source_location][item_id] == 0 and item_source_location == "inventory":
+            # Only delete key if it's from inventory and count is zero.
+            # For personal_resources, we keep the key even if it's 0 for consistency.
+            del from_agent[item_source_location][item_id]
+
+        receiver_destination_location = "inventory" if item_id in config.CRAFTABLE_ITEMS else "personal_resources"
+        to_agent.setdefault(receiver_destination_location, {})
+        to_agent[receiver_destination_location][item_id] = to_agent[receiver_destination_location].get(item_id, 0) + quantity_to_move
+
     # Transfer items from proposer to responder
     for item_to_give in proposal['offered_by_proposer']:
         item_id = item_to_give['item_id']
@@ -109,12 +224,7 @@ def _transfer_items_for_trade(proposer_agent, responder_agent, proposal, world_d
             return False
 
         proposer_agent[proposer_source][item_id] -= quantity
-        if proposer_agent[proposer_source][item_id] == 0 and proposer_source == "inventory":
-            del proposer_agent[proposer_source][item_id]
-
-        receiver_dest = "inventory" if item_id in config.CRAFTABLE_ITEMS else "personal_resources"
-        responder_agent.setdefault(receiver_dest, {})
-        responder_agent[receiver_dest][item_id] = responder_agent[receiver_dest].get(item_id, 0) + quantity
+        _move_item_stack(proposer_agent, responder_agent, item_id, quantity, proposer_source)
 
     # Transfer items from responder to proposer
     for item_to_take in proposal['requested_from_target']:
@@ -129,12 +239,7 @@ def _transfer_items_for_trade(proposer_agent, responder_agent, proposal, world_d
             return False
 
         responder_agent[responder_source][item_id] -= quantity
-        if responder_agent[responder_source][item_id] == 0 and responder_source == "inventory":
-            del responder_agent[responder_source][item_id]
-
-        receiver_dest = "inventory" if item_id in config.CRAFTABLE_ITEMS else "personal_resources"
-        proposer_agent.setdefault(receiver_dest, {})
-        proposer_agent[receiver_dest][item_id] = proposer_agent[receiver_dest].get(item_id, 0) + quantity
+        _move_item_stack(responder_agent, proposer_agent, item_id, quantity, responder_source)
     return True
 
 
@@ -213,26 +318,38 @@ async def _handle_address_need(agent_data, details, world_data, all_agents_data,
                 if agent_data["skills"].get(skill_option, 0) > best_skill_val: best_skill_val = agent_data["skills"].get(skill_option, 0); actual_skill_to_use = skill_option
             if best_skill_val == -1 : actual_skill_to_use = "general_effort" # Fallback if no matching skills
     skill_level = agent_data["skills"].get(actual_skill_to_use, 0) if actual_skill_to_use != "general_effort" else 0; task_difficulty = target_need.get("difficulty", 3)
-    resource_gathered_for_need = None; action_type_for_effects = "unknown_action"
-    if "wood" in activity_desc.lower() or (target_need.get("related_skills") and "woodcutting" in target_need["related_skills"]): resource_gathered_for_need = "wood"; action_type_for_effects = "gather_wood"
-    elif "herb" in activity_desc.lower() or (target_need.get("related_skills") and "herbalism" in target_need["related_skills"]): resource_gathered_for_need = "herbs"; action_type_for_effects = "gather_herbs"
-    if resource_gathered_for_need:
-        base_yield = random.randint(1, 2) + skill_level // 2; tool_effects = _get_equipped_item_effects(agent_data, action_type_for_effects, resource_gathered_for_need); yield_bonus_flat = 0
-        for effect in tool_effects:
-            if effect.get("type") == "gathering_yield" and effect.get("resource") == resource_gathered_for_need: yield_bonus_flat += effect.get("bonus_flat", 0)
-        base_yield += yield_bonus_flat
-        if yield_bonus_flat > 0: add_memory_log(agent_data, f"Used a tool, improving {resource_gathered_for_need} gathering."); activity_desc += " (using a tool)"
-        else: add_memory_log(agent_data, f"Gathered {resource_gathered_for_need} with basic means.")
-        if game_utils.perform_skill_check(skill_level, difficulty=task_difficulty):
-            amount_gained = max(1, base_yield)
-            allocation_narration = await _decide_and_allocate_resources(agent_data, resource_gathered_for_need, amount_gained, world_data, all_agents_data, llm_caller, prompt_generator_allocation_func)
-            main_narration = f"{agent_data['name']} diligently {activity_desc}, acquiring {amount_gained} {resource_gathered_for_need}. They {allocation_narration}"
-            target_need["progress"] = min(1.0, target_need.get("progress", 0.0) + (0.02 * amount_gained * (skill_level + 1)))
+    resource_gathered_for_need = None; action_type_for_effects = "unknown_action"; gather_config_key = None
+
+    if "wood" in activity_desc.lower() or (target_need.get("related_skills") and "woodcutting" in target_need["related_skills"]):
+        resource_gathered_for_need = "wood"; action_type_for_effects = "gather_wood"; gather_config_key = "wood" # Assuming key in GATHERABLE_PERSONAL_RESOURCES
+    elif "herb" in activity_desc.lower() or (target_need.get("related_skills") and "herbalism" in target_need["related_skills"]):
+        resource_gathered_for_need = "herbs"; action_type_for_effects = "gather_herbs"; gather_config_key = "healing_herbs" # Assuming key
+
+    if resource_gathered_for_need and gather_config_key and gather_config_key in config.GATHERABLE_PERSONAL_RESOURCES:
+        gather_info = config.GATHERABLE_PERSONAL_RESOURCES[gather_config_key]
+        # Use skill_level (already determined based on need or agent's best)
+        # Use task_difficulty from the need as override
+        main_narration, amount_gained = await _perform_gather_resource(
+            agent_data, resource_gathered_for_need, skill_level, task_difficulty,
+            gather_info["base_yield"], action_type_for_effects,
+            is_for_need=True, world_data=world_data, all_agents_data=all_agents_data,
+            llm_caller=llm_caller, prompt_generator_allocation_func=prompt_generator_allocation_func,
+            activity_desc_override=activity_desc
+        )
+        if amount_gained > 0:
+            target_need["progress"] = min(1.0, target_need.get("progress", 0.0) + (config.PROGRESS_PER_SUCCESSFUL_GATHER * amount_gained * (skill_level + 1))) # Adjusted progress factor
             return f"{main_narration} (Task progress: {target_need['progress']:.0%})"
-        else: return f"{agent_data['name']} attempted to {activity_desc} but failed to gather any significant {resource_gathered_for_need}."
+        else:
+            return main_narration # Returns the failure message from _perform_gather_resource
+
+    # If not resource gathering for the need, or if it's a different type of need contribution
     if game_utils.perform_skill_check(skill_level, difficulty=task_difficulty):
-        contribution_amount = random.randint(1, skill_level + 2)
-        if actual_skill_to_use in ["building", "crafting"] and any(s in target_need.get("related_skills", []) for s in ["building", "crafting"]):
+        contribution_amount = random.randint(1, skill_level + 2) # Base contribution
+
+        # Check for material consuming tasks like building or specific crafting needs
+        if actual_skill_to_use in ["building", "crafting"] and \
+           any(s in target_need.get("related_skills", []) for s in ["building", "crafting"]) and \
+           "required_materials" in target_need:
             mats_ok = True; materials_consumed_this_turn = {}
             if "required_materials" in target_need:
                 for mat, req_amount_per_tick in target_need["required_materials"].items():
@@ -302,26 +419,28 @@ async def _handle_personal_action(agent_data, details, world_data, all_agents_da
                 agent_data["status"]["hunger"] = max(0, agent_data["status"]["hunger"] - hunger_reduced_raw)
                 return f"{agent_data['name']} ate {amount_to_eat} raw {item_to_eat_id.replace('_',' ')}. (Hunger: {agent_data['status']['hunger']})"
             else: return f"{agent_data['name']} wanted to eat {amount_to_eat} {item_to_eat_id.replace('_',' ')} but didn't have enough."
-    elif activity == "gather_resource":
+    elif activity == "gather_resource": # Personal gathering
         resource_to_gather = details.get("resource_id", None)
-        if not resource_to_gather or resource_to_gather not in config.GATHERABLE_PERSONAL_RESOURCES: return f"{agent_data['name']} tried to gather an unknown resource: '{resource_to_gather or 'unspecified'}'. They look confused."
-        gather_info = config.GATHERABLE_PERSONAL_RESOURCES[resource_to_gather]; skill_to_use = gather_info["skill"]; skill_level = agent_data["skills"].get(skill_to_use, 0); difficulty = gather_info["base_difficulty"]
-        tool_effects = _get_equipped_item_effects(agent_data, f"gather_{resource_to_gather}", resource_to_gather); yield_bonus_flat_personal = 0
-        for effect in tool_effects:
-            if effect.get("type") == "gathering_yield" and effect.get("resource") == resource_to_gather: yield_bonus_flat_personal += effect.get("bonus_flat", 0)
-        if yield_bonus_flat_personal > 0: add_memory_log(agent_data, f"Used a tool for personal gathering of {resource_to_gather}.")
-        if game_utils.perform_skill_check(skill_level, difficulty=difficulty):
-            base_yield_range = gather_info["base_yield"]; amount_gained = random.randint(base_yield_range[0], base_yield_range[1]) + (skill_level // 2) + yield_bonus_flat_personal; amount_gained = max(0, amount_gained)
-            if amount_gained > 0:
-                # For personal gathering, directly add to personal_resources, no LLM allocation needed.
-                agent_data["personal_resources"].setdefault(resource_to_gather, 0); agent_data["personal_resources"][resource_to_gather] += amount_gained
-                add_memory_log(agent_data, f"Personally gathered {amount_gained} {resource_to_gather.replace('_',' ')}.")
-                return f"{agent_data['name']} foraged and found {amount_gained} {resource_to_gather.replace('_',' ')}, adding it to their personal supply."
-            else: return f"{agent_data['name']} searched for {resource_to_gather.replace('_',' ')} but found none this time."
-        else: return f"{agent_data['name']} tried foraging for {resource_to_gather.replace('_',' ')} but failed to find any."
+        if not resource_to_gather or resource_to_gather not in config.GATHERABLE_PERSONAL_RESOURCES:
+            return f"{agent_data['name']} tried to gather an unknown resource: '{resource_to_gather or 'unspecified'}'. They look confused."
+
+        gather_info = config.GATHERABLE_PERSONAL_RESOURCES[resource_to_gather]
+        skill_to_use = gather_info["skill"]
+        skill_level = agent_data["skills"].get(skill_to_use, 0)
+        difficulty = gather_info["base_difficulty"]
+        action_type_for_effects = f"gather_{resource_to_gather}" # e.g., "gather_wood", "gather_healing_herbs"
+
+        narration, _ = await _perform_gather_resource( # amount_gained is handled internally by _perform_gather_resource for personal
+            agent_data, resource_to_gather, skill_level, difficulty,
+            gather_info["base_yield"], action_type_for_effects,
+            is_for_need=False, world_data=world_data, all_agents_data=all_agents_data,
+            llm_caller=llm_caller, prompt_generator_allocation_func=prompt_generator_allocation_func
+        )
+        return narration
     elif activity == "craft_item":
         item_id_to_craft = details.get("item_id", None)
-        if not item_id_to_craft or item_id_to_craft not in config.CRAFTABLE_ITEMS: return f"{agent_data['name']} tried to craft an unknown item: '{item_id_to_craft or 'unspecified'}'. They look confused."
+        if not item_id_to_craft or item_id_to_craft not in config.CRAFTABLE_ITEMS:
+            return f"{agent_data['name']} tried to craft an unknown item: '{item_id_to_craft or 'unspecified'}'. They look confused."
         item_def = config.CRAFTABLE_ITEMS[item_id_to_craft]; recipe = item_def["recipe"]; skill_req_name = item_def["skill_required"]; min_skill = item_def["min_skill_level"]
         agent_skill_level = agent_data["skills"].get(skill_req_name, 0); crafting_energy_cost = item_def.get("energy_cost", config.BASE_ENERGY_COST_PER_ACTION)
         agent_data["status"]["energy"] -= (crafting_energy_cost - config.BASE_ENERGY_COST_PER_ACTION)
@@ -361,183 +480,297 @@ async def _handle_personal_action(agent_data, details, world_data, all_agents_da
     elif activity == "error_idle": return f"{agent_data['name']} {random.choice(['seems dazed.', 'is momentarily confused.', 'stares blankly for a moment.'])}"
     return f"{agent_data['name']} decided to {activity.replace('_',' ')} for their own reasons."
 
+# --- Social Action Sub-Handlers ---
+async def _social_make_statement(agent_data: dict, details: dict, target_agent: dict | None, target_description: str, full_action_json: dict) -> str:
+    """Handles an agent making a statement to another agent."""
+    statement_content = details.get("statement_content") or full_action_json.get("speech")
+    if not statement_content or not target_agent: # target_agent is now the resolved object
+        return f"{agent_data['name']} seems to want to say something to {target_description}, but remains silent."
+    add_memory_log(agent_data, f"You said to {target_description}: \"{statement_content}\"")
+    # target_agent is already the agent object, no need to look up with all_agents_data
+    add_memory_log(target_agent, f"{agent_data['name']} said to you: \"{statement_content}\"")
+    return f"{agent_data['name']} says to {target_description}: \"{statement_content}\""
 
-async def _handle_social_action(agent_data, details, world_data, all_agents_data, full_action_json):
+async def _social_talk_general(agent_data: dict, target_agent: dict | None, target_description: str) -> str:
+    """Handles an agent performing a general interaction."""
+    return f"{agent_data['name']} interacts with {target_description if target_agent else 'the surroundings'}."
+
+async def _social_propose_new_need(agent_data: dict, details: dict, world_data: dict, full_action_json: dict) -> str:
+    """Handles an agent proposing a new need or suggesting for an existing one."""
+    need_desc = details.get("need_description", "a new task for the village")
+    related_skills_prop = details.get("related_skills", ["general_effort"]) # Ensure this is a list
+    urgency_prop = details.get("urgency", "medium")
+    target_need_id_suggestion = details.get("target_need_id")
+
+    if target_need_id_suggestion:
+        existing_need = next((n for n in world_data["active_needs"] if n["need_id"] == target_need_id_suggestion), None)
+        if existing_need:
+            suggestion_content = details.get("suggestion_content") or full_action_json.get("speech", "a suggestion")
+            existing_need["description"] += f" (Suggestion by {agent_data['name']}: {suggestion_content})"
+            event_message = f"{agent_data['name']} made a suggestion regarding task: '{existing_need['description'][:30]}...'"
+            world_data["events_log"].append(event_message)
+            add_memory_log(agent_data, f"Offered a suggestion for task {existing_need['need_id']}: {suggestion_content}")
+            return f"{agent_data['name']} offered a suggestion for the task '{existing_need['description'][:50]}...'"
+        else:
+            add_memory_log(agent_data, f"Tried to suggest for non-existent task ID {target_need_id_suggestion}, will propose as new.")
+
+    if len(world_data["active_needs"]) < 10: # Max needs
+        new_need_id = f"N_User_{agent_data['name'][:3]}_{random.randint(100,999)}"
+        while any(n['need_id'] == new_need_id for n in world_data['active_needs']):
+            new_need_id = f"N_User_{agent_data['name'][:3]}_{random.randint(100,999)}"
+        world_data["active_needs"].append({
+            "need_id": new_need_id,
+            "description": f"(Proposed by {agent_data['name']}) {need_desc}",
+            "urgency": urgency_prop,
+            "related_skills": related_skills_prop,
+            "progress": 0.0,
+            "assigned_agents": [agent_data["agent_id"]] # Automatically assign proposer
+        })
+        world_data["events_log"].append(f"{agent_data['name']} proposed a new village task: '{need_desc}'")
+        add_memory_log(agent_data, f"Proposed a new task: {need_desc}")
+        return f"{agent_data['name']} proposed a new task for the village: '{need_desc}'."
+    else: # Max needs reached
+        add_memory_log(agent_data, f"Wanted to propose '{need_desc}', but village has too many tasks.")
+        return f"{agent_data['name']} wanted to propose '{need_desc}', but the village already has many tasks on its mind."
+
+async def _social_give_item(agent_data: dict, details: dict, target_agent: dict | None, target_description: str, world_data: dict) -> str:
+    """Handles an agent giving an item to another agent."""
+    item_id = details.get("item_id")
+    quantity = details.get("quantity", 1)
+
+    if not target_agent: # target_agent is the resolved object
+        return f"{agent_data['name']} wanted to give {item_id or 'an item'} to {target_description}, but couldn't find them."
+    if not item_id or not isinstance(quantity, int) or quantity <= 0:
+        add_memory_log(agent_data, f"Tried to give an invalid item or quantity to {target_description}.")
+        return f"{agent_data['name']} fumbled trying to give something to {target_description} (invalid item/quantity)."
+
+    source_location_giver = None # Will be agent_data["personal_resources"] or agent_data["inventory"]
+    item_name_display = item_id.replace('_', ' ')
+    if item_id in agent_data.get("personal_resources", {}) and agent_data["personal_resources"][item_id] >= quantity:
+        source_location_giver = agent_data["personal_resources"]
+    elif item_id in agent_data.get("inventory", {}) and agent_data["inventory"][item_id] >= quantity:
+        source_location_giver = agent_data["inventory"]
+        item_name_display = config.CRAFTABLE_ITEMS.get(item_id, {}).get("name", item_id.replace('_', ' '))
+    else:
+        add_memory_log(agent_data, f"Tried to give {quantity} {item_name_display} to {target_description}, but didn't have enough.")
+        return f"{agent_data['name']} wanted to give {quantity} {item_name_display} to {target_description} but didn't have it."
+
+    target_location_receiver = None
+    if item_id in config.CRAFTABLE_ITEMS:
+        target_agent.setdefault("inventory", {})
+        target_location_receiver = target_agent["inventory"]
+    else:
+        target_agent.setdefault("personal_resources", {})
+        target_location_receiver = target_agent["personal_resources"]
+
+    source_location_giver[item_id] -= quantity
+    if source_location_giver[item_id] == 0 and source_location_giver is agent_data["inventory"]:
+        del source_location_giver[item_id]
+
+    target_location_receiver[item_id] = target_location_receiver.get(item_id, 0) + quantity
+
+    add_memory_log(agent_data, f"You gave {quantity} {item_name_display} to {target_description}.")
+    # target_agent is already the agent object
+    add_memory_log(target_agent, f"{agent_data['name']} gave you {quantity} {item_name_display}.")
+    world_data["events_log"].append(f"{agent_data['name']} gave {quantity} {item_name_display} to {target_description}.")
+    return f"{agent_data['name']} gave {quantity} {item_name_display} to {target_description}."
+
+async def _social_steal_item(agent_data: dict, details: dict, target_agent: dict | None, target_description: str, world_data: dict) -> str:
+    """Handles an agent attempting to steal an item from another agent."""
+    item_id = details.get("item_id")
+    quantity = details.get("quantity", 1)
+
+    if not target_agent: # target_agent is the resolved object
+        return f"{agent_data['name']} looked for someone to steal from but {target_description} was not clear."
+    if not item_id or not isinstance(quantity, int) or quantity <= 0:
+        add_memory_log(agent_data, f"My attempt to steal from {target_description} was ill-conceived (invalid item/quantity).")
+        return f"{agent_data['name']} reconsidered stealing from {target_description} (invalid item/quantity)."
+
+    attacker_skill = agent_data['skills'].get('thievery', 0) # Default to 0 if skill not present
+    target_awareness = target_agent['skills'].get('awareness', 0)
+    difficulty_mod = min(3, max(-3, target_awareness - attacker_skill)) # Max difficulty adjustment of +/-3
+    steal_difficulty = max(1, 3 + difficulty_mod) # Base difficulty 3, adjusted by skill difference
+
+    item_name_display = item_id.replace('_', ' ')
+    source_location_target = None
+    if item_id in target_agent.get("personal_resources", {}) and target_agent["personal_resources"][item_id] >= quantity:
+        source_location_target = target_agent["personal_resources"]
+    elif item_id in target_agent.get("inventory", {}) and target_agent["inventory"][item_id] >= quantity:
+        source_location_target = target_agent["inventory"]
+        item_name_display = config.CRAFTABLE_ITEMS.get(item_id, {}).get("name", item_id.replace('_', ' '))
+    else:
+        add_memory_log(agent_data, f"Tried to steal {item_name_display} from {target_description}, but they didn't have enough.")
+        return f"{agent_data['name']} tried to steal {item_name_display} from {target_description}, but they didn't seem to have it."
+
+    if game_utils.perform_skill_check(attacker_skill, difficulty=steal_difficulty):
+        target_notices_difficulty = 3 + (attacker_skill // 2) # Higher attacker skill makes it harder for target to notice
+        target_noticed_theft = not game_utils.perform_skill_check(target_awareness, difficulty=target_notices_difficulty)
+
+        destination_thief = None
+        if item_id in config.CRAFTABLE_ITEMS:
+            agent_data.setdefault("inventory", {})
+            destination_thief = agent_data["inventory"]
+        else:
+            agent_data.setdefault("personal_resources", {})
+            destination_thief = agent_data["personal_resources"]
+
+        source_location_target[item_id] -= quantity
+        if source_location_target[item_id] == 0 and source_location_target is target_agent["inventory"]:
+            del source_location_target[item_id]
+        destination_thief[item_id] = destination_thief.get(item_id, 0) + quantity
+
+        add_memory_log(agent_data, f"You successfully stole {quantity} {item_name_display} from {target_description}.")
+        world_data["events_log"].append(f"A theft occurred: {agent_data['name']} stole from {target_description}.")
+        if target_noticed_theft:
+            add_memory_log(target_agent, f"You realized {quantity} {item_name_display} was stolen from you by {agent_data['name']}!")
+            return f"{agent_data['name']} stole {quantity} {item_name_display} from {target_description}, who noticed the act!"
+        else:
+            add_memory_log(target_agent, f"You noticed {quantity} {item_name_display} is missing. You feel uneasy.")
+            return f"{agent_data['name']} successfully stole {quantity} {item_name_display} from {target_description}."
+    else: # Failed skill check for stealing
+        target_notices_attempt_difficulty = 2 + attacker_skill # Easier for target to notice a failed attempt
+        target_noticed_attempt = not game_utils.perform_skill_check(target_awareness, difficulty=target_notices_attempt_difficulty)
+        if target_noticed_attempt:
+            add_memory_log(agent_data, f"You failed to steal {item_name_display} from {target_description}, and they saw you!")
+            add_memory_log(target_agent, f"{agent_data['name']} clumsily tried to steal {item_name_display} from you, but you caught them!")
+            world_data["events_log"].append(f"{target_description} caught {agent_data['name']} trying to steal!")
+            return f"{agent_data['name']} failed to steal {item_name_display} from {target_description} and was caught in the act!"
+        else:
+            add_memory_log(agent_data, f"You tried to steal {item_name_display} from {target_description} but failed without them noticing.")
+            return f"{agent_data['name']} tried to steal {item_name_display} from {target_description} but failed."
+
+async def _social_propose_trade(agent_data: dict, details: dict, target_agent: dict | None, target_description: str, world_data: dict, all_agents_data: dict) -> str:
+    """Handles an agent proposing a trade to another agent."""
+    items_offered = details.get("items_offered", [])
+    items_requested = details.get("items_requested", [])
+
+    if not target_agent: # target_agent is the resolved object
+        return f"{agent_data['name']} looked for someone to trade with, but {target_description} was not clear."
+
+    if not items_offered or not items_requested: # Basic check for empty offers/requests
+        add_memory_log(agent_data, f"Tried to propose a trade with {target_description} but didn't specify items correctly.")
+        return f"{agent_data['name']} started to propose a trade but didn't specify all items."
+
+    for item_offer in items_offered:
+        item_id_offer = item_offer.get('item_id')
+        quantity_offer = item_offer.get('quantity', 0)
+        if quantity_offer <= 0 or not _validate_and_get_item_source(agent_data, item_id_offer, quantity_offer):
+            item_name_offer = item_id_offer.replace('_',' ') if item_id_offer else "unknown_item"
+            add_memory_log(agent_data, f"Tried to offer {quantity_offer} {item_name_offer} for trade with {target_description} but didn't have enough or invalid quantity.")
+            return f"{agent_data['name']} tried to offer {quantity_offer} {item_name_offer} for trade with {target_description} but didn't have enough or quantity was invalid."
+
+    proposal_id = f"trade_{agent_data['agent_id']}_{random.randint(1000,9999)}"
+    proposal = {
+        "proposal_id": proposal_id, "proposer_id": agent_data['agent_id'],
+        "proposer_name": agent_data['name'], "target_id": target_agent.get('agent_id'), # Use target_agent.id
+        "target_name": target_description, "offered_by_proposer": items_offered,
+        "requested_from_target": items_requested, "status": "pending"
+    }
+    world_data['pending_trade_proposals'].append(proposal)
+    offered_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in items_offered])
+    requested_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in items_requested])
+
+    add_memory_log(agent_data, f"You proposed a trade (ID: {proposal_id}) to {target_description}, offering {offered_str} for {requested_str}.")
+    # target_agent is already the agent object
+    add_memory_log(target_agent, f"{agent_data['name']} proposed a trade (ID: {proposal_id}). They offer: {offered_str}. They want: {requested_str}.")
+    world_data["events_log"].append(f"{agent_data['name']} proposed a trade to {target_description}.")
+    return f"{agent_data['name']} proposes a trade to {target_description} offering {offered_str} for {requested_str}."
+
+async def _social_respond_to_trade(agent_data: dict, details: dict, world_data: dict, all_agents_data: dict) -> str:
+    """Handles an agent responding to a trade proposal."""
+    proposal_id_resp = details.get("proposal_id")
+    response_decision = details.get("response") # "accept" or "reject"
+
+    if not proposal_id_resp or not response_decision:
+        return f"{agent_data['name']} considered a trade but didn't specify the proposal or response."
+
+    found_proposal = None
+    # Iterate safely: do not modify list while iterating if possible, though here we only change status
+    for p in world_data.get('pending_trade_proposals', []):
+        if p['proposal_id'] == proposal_id_resp:
+            found_proposal = p
+            break # Found the proposal
+
+    if not found_proposal:
+        return f"{agent_data['name']} tried to respond to trade {proposal_id_resp}, but it doesn't exist."
+    if found_proposal['target_id'] != agent_data['agent_id']: # Agent trying to respond to a trade not meant for them
+        return f"{agent_data['name']} tried to respond to trade {proposal_id_resp}, but it wasn't for them."
+    if found_proposal['status'] != "pending": # Trade already actioned
+        return f"Trade {proposal_id_resp} is no longer pending ({found_proposal['status']})."
+
+    proposer_agent = all_agents_data.get(found_proposal['proposer_id'])
+    if not proposer_agent: # Proposer agent no longer exists (edge case)
+        found_proposal['status'] = "failed_proposer_missing"
+        world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) failed: Proposer {found_proposal['proposer_name']} is missing.")
+        return f"The original proposer of trade {proposal_id_resp} is no longer around."
+
+    if response_decision == "accept":
+        # Validate both parties can fulfill the trade at the moment of acceptance
+        can_proposer_give = all(_validate_and_get_item_source(proposer_agent, item['item_id'], item['quantity'])
+                                for item in found_proposal['offered_by_proposer'])
+        can_responder_give = all(_validate_and_get_item_source(agent_data, item['item_id'], item['quantity'])
+                                 for item in found_proposal['requested_from_target'])
+
+        if can_proposer_give and can_responder_give:
+            if _transfer_items_for_trade(proposer_agent, agent_data, found_proposal, world_data):
+                found_proposal['status'] = "accepted"
+                world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} was accepted.")
+                add_memory_log(proposer_agent, f"Your trade with {agent_data['name']} (ID: {proposal_id_resp}) was accepted. Items exchanged.")
+                add_memory_log(agent_data, f"You accepted trade with {proposer_agent['name']} (ID: {proposal_id_resp}). Items exchanged.")
+                return f"{agent_data['name']} accepted the trade (ID: {proposal_id_resp}) with {proposer_agent['name']}. Items were exchanged."
+            else: # Should be rare if _validate_and_get_item_source is accurate and no race conditions
+                found_proposal['status'] = "failed_transfer_error"
+                return f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} failed during transfer."
+        else: # One or both parties cannot fulfill their side
+            found_proposal['status'] = "failed_items_missing"
+            missing_items_proposer_msg = "" if can_proposer_give else f"{proposer_agent['name']} is missing items. "
+            missing_items_responder_msg = "" if can_responder_give else f"{agent_data['name']} is missing items. "
+            full_fail_msg = f"Trade (ID: {proposal_id_resp}) could not be completed: {missing_items_proposer_msg}{missing_items_responder_msg}".strip()
+            world_data["events_log"].append(full_fail_msg)
+            add_memory_log(proposer_agent, full_fail_msg)
+            add_memory_log(agent_data, full_fail_msg)
+            return full_fail_msg
+    elif response_decision == "reject":
+        found_proposal['status'] = "rejected"
+        world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} was rejected by {agent_data['name']}.")
+        add_memory_log(proposer_agent, f"Your trade proposal (ID: {proposal_id_resp}) with {agent_data['name']} was rejected.")
+        add_memory_log(agent_data, f"You rejected trade proposal (ID: {proposal_id_resp}) from {proposer_agent['name']}.")
+        return f"{agent_data['name']} rejected the trade (ID: {proposal_id_resp}) with {proposer_agent['name']}."
+    else: # Unclear response
+        return f"{agent_data['name']} gave an unclear response to trade proposal {proposal_id_resp}."
+
+# Main Social Action Handler
+async def _handle_social_action(agent_data: dict, details: dict, world_data: dict, all_agents_data: dict, full_action_json: dict) -> str:
+    """
+    Routes social actions to specific sub-handler functions.
+    """
     sub_type = details.get("sub_type", "interact")
     target_agent_id = details.get("target_agent_id")
-    target_description = details.get("target_description", "another villager")
+    target_description = details.get("target_description", "another villager") # Fallback description
 
-    target_agent = None
+    target_agent_obj = None # Use a different variable name to avoid confusion with 'target_agent' in outer scope
     if target_agent_id and target_agent_id in all_agents_data:
-        target_agent = all_agents_data[target_agent_id]
-        target_description = target_agent["name"]
+        target_agent_obj = all_agents_data[target_agent_id]
+        # target_description is already set, or defaults to "another villager"
+        if not target_description or target_description == "another villager":
+             target_description = target_agent_obj.get("name", "another villager")
+
 
     if sub_type == "make_statement_to_agent":
-        statement_content = details.get("statement_content") or full_action_json.get("speech")
-        if not statement_content or not target_agent:
-            return f"{agent_data['name']} seems to want to say something to {target_description}, but remains silent."
-        add_memory_log(agent_data, f"You said to {target_description}: \"{statement_content}\"")
-        add_memory_log(target_agent, f"{agent_data['name']} said to you: \"{statement_content}\"")
-        return f"{agent_data['name']} says to {target_description}: \"{statement_content}\""
-
-    elif sub_type == "talk_general": # Generic interaction, might not need specific target
-        return f"{agent_data['name']} interacts with {target_description if target_agent else 'the surroundings'}."
-
+        return await _social_make_statement(agent_data, details, target_agent_obj, target_description, full_action_json)
+    elif sub_type == "talk_general":
+        return await _social_talk_general(agent_data, target_agent_obj, target_description)
     elif sub_type == "propose_new_need":
-        need_desc = details.get("need_description", "a new task for the village"); related_skills_prop = details.get("related_skills", ["general_effort"]); urgency_prop = details.get("urgency", "medium")
-        target_need_id_suggestion = details.get("target_need_id")
-        if target_need_id_suggestion:
-            existing_need = next((n for n in world_data["active_needs"] if n["need_id"] == target_need_id_suggestion), None)
-            if existing_need:
-                suggestion_content = details.get("suggestion_content") or full_action_json.get("speech", "a suggestion")
-                existing_need["description"] += f" (Suggestion by {agent_data['name']}: {suggestion_content})"
-                event_message = f"{agent_data['name']} made a suggestion regarding task: '{existing_need['description'][:30]}...'"; world_data["events_log"].append(event_message)
-                add_memory_log(agent_data, f"Offered a suggestion for task {existing_need['need_id']}: {suggestion_content}")
-                return f"{agent_data['name']} offered a suggestion for the task '{existing_need['description'][:50]}...'"
-            else: add_memory_log(agent_data, f"Tried to suggest for non-existent task ID {target_need_id_suggestion}, will propose as new.")
-        if len(world_data["active_needs"]) < 10: # Max needs
-            new_need_id = f"N_User_{agent_data['name'][:3]}_{random.randint(100,999)}"
-            while any(n['need_id'] == new_need_id for n in world_data['active_needs']): new_need_id = f"N_User_{agent_data['name'][:3]}_{random.randint(100,999)}"
-            world_data["active_needs"].append({"need_id": new_need_id, "description": f"(Proposed by {agent_data['name']}) {need_desc}", "urgency": urgency_prop, "related_skills": related_skills_prop, "progress": 0.0, "assigned_agents": [agent_data["agent_id"]]})
-            world_data["events_log"].append(f"{agent_data['name']} proposed a new village task: '{need_desc}'"); add_memory_log(agent_data, f"Proposed a new task: {need_desc}")
-            return f"{agent_data['name']} proposed a new task for the village: '{need_desc}'."
-        else:
-            add_memory_log(agent_data, f"Wanted to propose '{need_desc}', but village has too many tasks.")
-            return f"{agent_data['name']} wanted to propose '{need_desc}', but the village already has many tasks on its mind."
-
+        return await _social_propose_new_need(agent_data, details, world_data, full_action_json)
     elif sub_type == "give_item_to_agent":
-        item_id = details.get("item_id"); quantity = details.get("quantity", 1)
-        if not target_agent: return f"{agent_data['name']} wanted to give {item_id} to {target_description}, but couldn't find them."
-        if not item_id or not isinstance(quantity, int) or quantity <= 0:
-            add_memory_log(agent_data, f"Tried to give an invalid item or quantity to {target_description}."); return f"{agent_data['name']} fumbled trying to give something to {target_description} (invalid item/quantity)."
-        source_location_giver = None; item_name_display = item_id.replace('_', ' ')
-        if item_id in agent_data.get("personal_resources", {}) and agent_data["personal_resources"][item_id] >= quantity: source_location_giver = agent_data["personal_resources"]
-        elif item_id in agent_data.get("inventory", {}) and agent_data["inventory"][item_id] >= quantity: source_location_giver = agent_data["inventory"]; item_name_display = config.CRAFTABLE_ITEMS.get(item_id, {}).get("name", item_id.replace('_', ' '))
-        else:
-            add_memory_log(agent_data, f"Tried to give {quantity} {item_name_display} to {target_description}, but didn't have enough."); return f"{agent_data['name']} wanted to give {quantity} {item_name_display} to {target_description} but didn't have it."
-        target_location_receiver = None
-        if item_id in config.CRAFTABLE_ITEMS: target_agent.setdefault("inventory", {}); target_location_receiver = target_agent["inventory"]
-        else: target_agent.setdefault("personal_resources", {}); target_location_receiver = target_agent["personal_resources"]
-        source_location_giver[item_id] -= quantity
-        if source_location_giver[item_id] == 0 and source_location_giver is agent_data["inventory"]: del source_location_giver[item_id] # Only remove from dict if it's inventory
-        target_location_receiver[item_id] = target_location_receiver.get(item_id, 0) + quantity
-        add_memory_log(agent_data, f"You gave {quantity} {item_name_display} to {target_description}."); add_memory_log(target_agent, f"{agent_data['name']} gave you {quantity} {item_name_display}.")
-        world_data["events_log"].append(f"{agent_data['name']} gave {quantity} {item_name_display} to {target_description}.")
-        return f"{agent_data['name']} gave {quantity} {item_name_display} to {target_description}."
-
+        return await _social_give_item(agent_data, details, target_agent_obj, target_description, world_data)
     elif sub_type == "steal_item_from_agent":
-        item_id = details.get("item_id"); quantity = details.get("quantity", 1)
-        if not target_agent: return f"{agent_data['name']} looked for someone to steal from but {target_description} was not clear."
-        if not item_id or not isinstance(quantity, int) or quantity <= 0:
-            add_memory_log(agent_data, f"My attempt to steal from {target_description} was ill-conceived (invalid item/quantity)."); return f"{agent_data['name']} reconsidered stealing from {target_description} (invalid item/quantity)."
-        attacker_skill = agent_data['skills'].get('thievery', 0); target_awareness = target_agent['skills'].get('awareness', 0)
-        difficulty_mod = min(3, max(-3, target_awareness - attacker_skill)); steal_difficulty = max(1, 3 + difficulty_mod)
-        item_name_display = item_id.replace('_', ' '); source_location_target = None
-        item_in_resources = item_id in target_agent.get("personal_resources", {}) and target_agent["personal_resources"][item_id] >= quantity
-        item_in_inventory = item_id in target_agent.get("inventory", {}) and target_agent["inventory"][item_id] >= quantity
-        if item_in_resources: source_location_target = target_agent["personal_resources"]
-        elif item_in_inventory: source_location_target = target_agent["inventory"]; item_name_display = config.CRAFTABLE_ITEMS.get(item_id, {}).get("name", item_id.replace('_', ' '))
-        else:
-            add_memory_log(agent_data, f"Tried to steal {item_name_display} from {target_description}, but they didn't have enough."); return f"{agent_data['name']} tried to steal {item_name_display} from {target_description}, but they didn't seem to have it."
-        if game_utils.perform_skill_check(attacker_skill, difficulty=steal_difficulty):
-            target_notices_difficulty = 3 + (attacker_skill // 2); target_noticed_theft = not game_utils.perform_skill_check(target_awareness, difficulty=target_notices_difficulty)
-            destination_thief = None
-            if item_id in config.CRAFTABLE_ITEMS: agent_data.setdefault("inventory", {}); destination_thief = agent_data["inventory"]
-            else: agent_data.setdefault("personal_resources", {}); destination_thief = agent_data["personal_resources"]
-            source_location_target[item_id] -= quantity
-            if source_location_target[item_id] == 0 and source_location_target is target_agent["inventory"]: del source_location_target[item_id]
-            destination_thief[item_id] = destination_thief.get(item_id, 0) + quantity
-            add_memory_log(agent_data, f"You successfully stole {quantity} {item_name_display} from {target_description}.")
-            world_data["events_log"].append(f"A theft occurred: {agent_data['name']} stole from {target_description}.")
-            if target_noticed_theft:
-                add_memory_log(target_agent, f"You realized {quantity} {item_name_display} was stolen from you by {agent_data['name']}!"); return f"{agent_data['name']} stole {quantity} {item_name_display} from {target_description}, who noticed the act!"
-            else:
-                add_memory_log(target_agent, f"You noticed {quantity} {item_name_display} is missing. You feel uneasy."); return f"{agent_data['name']} successfully stole {quantity} {item_name_display} from {target_description}."
-        else:
-            target_notices_attempt_difficulty = 2 + attacker_skill; target_noticed_attempt = not game_utils.perform_skill_check(target_awareness, difficulty=target_notices_attempt_difficulty)
-            if target_noticed_attempt:
-                add_memory_log(agent_data, f"You failed to steal {item_name_display} from {target_description}, and they saw you!"); add_memory_log(target_agent, f"{agent_data['name']} clumsily tried to steal {item_name_display} from you, but you caught them!")
-                world_data["events_log"].append(f"{target_description} caught {agent_data['name']} trying to steal!"); return f"{agent_data['name']} failed to steal {item_name_display} from {target_description} and was caught in the act!"
-            else:
-                add_memory_log(agent_data, f"You tried to steal {item_name_display} from {target_description} but failed without them noticing."); return f"{agent_data['name']} tried to steal {item_name_display} from {target_description} but failed."
-
+        return await _social_steal_item(agent_data, details, target_agent_obj, target_description, world_data)
     elif sub_type == "propose_trade":
-        target_agent_id_trade = details.get("target_agent_id")
-        items_offered = details.get("items_offered", [])
-        items_requested = details.get("items_requested", [])
-
-        if not target_agent_id_trade or target_agent_id_trade not in all_agents_data:
-            return f"{agent_data['name']} looked for someone to trade with, but {target_description} was not clear."
-
-        target_agent_trade_obj = all_agents_data[target_agent_id_trade]
-
-        if not items_offered or not items_requested:
-            add_memory_log(agent_data, f"Tried to propose a trade with {target_agent_trade_obj['name']} but didn't specify items correctly.")
-            return f"{agent_data['name']} started to propose a trade but didn't specify all items."
-
-        for item_offer in items_offered:
-            item_id_offer = item_offer.get('item_id')
-            quantity_offer = item_offer.get('quantity', 0)
-            if quantity_offer <= 0 or not _validate_and_get_item_source(agent_data, item_id_offer, quantity_offer):
-                item_name_offer = item_id_offer.replace('_',' ') if item_id_offer else "unknown_item"
-                add_memory_log(agent_data, f"Tried to offer {quantity_offer} {item_name_offer} for trade with {target_agent_trade_obj['name']} but didn't have enough or invalid quantity.")
-                return f"{agent_data['name']} tried to offer {quantity_offer} {item_name_offer} for trade with {target_agent_trade_obj['name']} but didn't have enough or quantity was invalid."
-
-        proposal_id = f"trade_{agent_data['agent_id']}_{random.randint(1000,9999)}"
-        proposal = {
-            "proposal_id": proposal_id, "proposer_id": agent_data['agent_id'],
-            "proposer_name": agent_data['name'], "target_id": target_agent_id_trade,
-            "target_name": target_agent_trade_obj['name'], "offered_by_proposer": items_offered,
-            "requested_from_target": items_requested, "status": "pending"
-        }
-        world_data['pending_trade_proposals'].append(proposal)
-        offered_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in items_offered])
-        requested_str = ", ".join([f"{i['quantity']} {i['item_id']}" for i in items_requested])
-        add_memory_log(agent_data, f"You proposed a trade (ID: {proposal_id}) to {target_agent_trade_obj['name']}, offering {offered_str} for {requested_str}.")
-        add_memory_log(target_agent_trade_obj, f"{agent_data['name']} proposed a trade (ID: {proposal_id}). They offer: {offered_str}. They want: {requested_str}.")
-        world_data["events_log"].append(f"{agent_data['name']} proposed a trade to {target_agent_trade_obj['name']}.")
-        return f"{agent_data['name']} proposes a trade to {target_agent_trade_obj['name']} offering {offered_str} for {requested_str}."
-
+        return await _social_propose_trade(agent_data, details, target_agent_obj, target_description, world_data, all_agents_data)
     elif sub_type == "respond_to_trade":
-        proposal_id_resp = details.get("proposal_id")
-        response_decision = details.get("response")
-        if not proposal_id_resp or not response_decision:
-            return f"{agent_data['name']} considered a trade but didn't specify the proposal or response."
-        proposal_index = -1; found_proposal = None
-        for i, p in enumerate(world_data.get('pending_trade_proposals', [])):
-            if p['proposal_id'] == proposal_id_resp: found_proposal = p; proposal_index = i; break
-        if not found_proposal: return f"{agent_data['name']} tried to respond to trade {proposal_id_resp}, but it doesn't exist."
-        if found_proposal['target_id'] != agent_data['agent_id']: return f"{agent_data['name']} tried to respond to trade {proposal_id_resp}, but it wasn't for them."
-        if found_proposal['status'] != "pending": return f"Trade {proposal_id_resp} is no longer pending ({found_proposal['status']})."
-        proposer_agent = all_agents_data.get(found_proposal['proposer_id'])
-        if not proposer_agent:
-            found_proposal['status'] = "failed_proposer_missing"; world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) failed: Proposer {found_proposal['proposer_name']} is missing.")
-            return f"The original proposer of trade {proposal_id_resp} is no longer around."
-        if response_decision == "accept":
-            can_proposer_give = all(_validate_and_get_item_source(proposer_agent, item['item_id'], item['quantity']) for item in found_proposal['offered_by_proposer'])
-            can_responder_give = all(_validate_and_get_item_source(agent_data, item['item_id'], item['quantity']) for item in found_proposal['requested_from_target'])
-            if can_proposer_give and can_responder_give:
-                if _transfer_items_for_trade(proposer_agent, agent_data, found_proposal, world_data):
-                    found_proposal['status'] = "accepted"; world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} was accepted.")
-                    add_memory_log(proposer_agent, f"Your trade with {agent_data['name']} (ID: {proposal_id_resp}) was accepted. Items exchanged.")
-                    add_memory_log(agent_data, f"You accepted trade with {proposer_agent['name']} (ID: {proposal_id_resp}). Items exchanged.")
-                    return f"{agent_data['name']} accepted the trade (ID: {proposal_id_resp}) with {proposer_agent['name']}. Items were exchanged."
-                else:
-                    found_proposal['status'] = "failed_transfer_error"
-                    return f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} failed during transfer."
-            else:
-                found_proposal['status'] = "failed_items_missing"
-                missing_items_proposer_msg = "" if can_proposer_give else f"{proposer_agent['name']} is missing items. "
-                missing_items_responder_msg = "" if can_responder_give else f"{agent_data['name']} is missing items. "
-                full_fail_msg = f"Trade (ID: {proposal_id_resp}) could not be completed: {missing_items_proposer_msg}{missing_items_responder_msg}".strip()
-                world_data["events_log"].append(full_fail_msg); add_memory_log(proposer_agent, full_fail_msg); add_memory_log(agent_data, full_fail_msg)
-                return full_fail_msg
-        elif response_decision == "reject":
-            found_proposal['status'] = "rejected"; world_data["events_log"].append(f"Trade (ID: {proposal_id_resp}) between {proposer_agent['name']} and {agent_data['name']} was rejected by {agent_data['name']}.")
-            add_memory_log(proposer_agent, f"Your trade proposal (ID: {proposal_id_resp}) with {agent_data['name']} was rejected.")
-            add_memory_log(agent_data, f"You rejected trade proposal (ID: {proposal_id_resp}) from {proposer_agent['name']}.")
-            return f"{agent_data['name']} rejected the trade (ID: {proposal_id_resp}) with {proposer_agent['name']}."
-        else: return f"{agent_data['name']} gave an unclear response to trade proposal {proposal_id_resp}."
+        return await _social_respond_to_trade(agent_data, details, world_data, all_agents_data)
+
     return f"{agent_data['name']} attempts to {sub_type.replace('_',' ')} with {target_description}."
 
 
