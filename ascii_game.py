@@ -6,21 +6,14 @@ import random
 import time
 import requests
 
-# --- Configuration Defaults & LLM Setup ---
-# NOTE: USE_MOCK_LLM is defaulted to True due to current environment instability for real LLM calls.
-# Users with a working local Ollama setup can override this by creating a config.py
-# and setting USE_MOCK_LLM = False (and optionally OLLAMA_DEFAULT_MODEL = "your_model_name").
-USE_MOCK_LLM_DEFAULT = True
-OLLAMA_DEFAULT_MODEL_DEFAULT = "gemma:2b"
-
+# Attempt to import config, use defaults if not found or specific values missing
 try:
     import config
-    USE_MOCK_LLM = getattr(config, 'USE_MOCK_LLM', USE_MOCK_LLM_DEFAULT)
-    OLLAMA_DEFAULT_MODEL = getattr(config, 'OLLAMA_DEFAULT_MODEL', OLLAMA_DEFAULT_MODEL_DEFAULT)
+    USE_MOCK_LLM = getattr(config, 'USE_MOCK_LLM', True)
+    OLLAMA_DEFAULT_MODEL = getattr(config, 'OLLAMA_DEFAULT_MODEL', "gemma:2b")
 except ImportError:
-    print("LOG: config.py not found. Using default LLM settings.")
-    USE_MOCK_LLM = USE_MOCK_LLM_DEFAULT
-    OLLAMA_DEFAULT_MODEL = OLLAMA_DEFAULT_MODEL_DEFAULT
+    USE_MOCK_LLM = True
+    OLLAMA_DEFAULT_MODEL = "gemma:2b"
 
 ollama_client_available = False
 actual_ollama_call = None
@@ -29,13 +22,10 @@ if not USE_MOCK_LLM:
         from ollama_client import call_model
         actual_ollama_call = call_model
         ollama_client_available = True
-        print("LOG: ollama_client.py loaded for REAL LLM calls.")
     except ImportError:
-        print("ERROR: ollama_client.py not found. Real LLM calls will fail. Forcing MOCK_LLM.")
-        USE_MOCK_LLM = True # Force mock if client is missing for real calls
+        USE_MOCK_LLM = True
 else:
-    print(f"LOG: USE_MOCK_LLM is True (Default: {USE_MOCK_LLM_DEFAULT}). Real LLM calls will be skipped.")
-
+    pass
 
 # --- Constants ---
 NPC_INITIAL_ENERGY_MIN = 80; NPC_INITIAL_ENERGY_MAX = 100; NPC_MAX_ENERGY = 100
@@ -57,6 +47,42 @@ AI_MODE_SEEKING_RESOURCE = "seeking_resource"; AI_MODE_GATHERING_RESOURCE = "gat
 AI_MODE_PATROLLING = "patrolling"; AI_MODE_ENCOUNTER = "encounter"
 ENCOUNTER_SUBMODE_TALKING = "talking"
 
+RELATIONSHIP_SCORE_MAX = 10; RELATIONSHIP_SCORE_MIN = -10; RELATIONSHIP_SCORE_NEUTRAL = 0
+DEFAULT_RELATIONSHIP_SCORE_CHANGE_POSITIVE = 1; DEFAULT_RELATIONSHIP_SCORE_CHANGE_NEGATIVE = -1
+STRONG_RELATIONSHIP_SCORE_CHANGE_POSITIVE = 3; STRONG_RELATIONSHIP_SCORE_CHANGE_NEGATIVE = -3
+
+# Interaction Type Constants (expanded for perspective)
+INTERACTION_TYPE_I_TALKED_TO_THEM = "I_TALKED_TO_THEM"         # Initial choice to [Talk]
+INTERACTION_TYPE_TALKED_TO_BY_ME = "TALKED_TO_BY_ME"       # For other NPC when self chose [Talk]
+
+# --- Relationship Descriptor Helper ---
+def get_relationship_descriptor(score):
+    if score <= RELATIONSHIP_SCORE_MIN + 3: # e.g., -10 to -7
+        return "very negative"
+    elif score <= -3: # e.g., -6 to -3
+        return "negative"
+    elif score < 0:   # e.g., -2 to -1
+        return "slightly negative"
+    elif score == 0:
+        return "neutral"
+    elif score < 3:   # e.g., 1 to 2
+        return "slightly positive"
+    elif score < RELATIONSHIP_SCORE_MAX - 2: # e.g., 3 to 7
+        return "positive"
+    else: # e.g., 8 to 10
+        return "very positive"
+INTERACTION_TYPE_DIALOGUE_EXCHANGE = "DIALOGUE_EXCHANGE"     # For ongoing talk after initiation (neutral for now)
+INTERACTION_TYPE_IGNORED_ME = "IGNORED_ME"                 # They chose [Ignore]
+INTERACTION_TYPE_I_IGNORED_THEM = "I_IGNORED_THEM"           # I chose [Ignore]
+INTERACTION_TYPE_THREATENED_ME = "THREATENED_ME"             # They chose [Threaten]
+INTERACTION_TYPE_I_THREATENED_THEM = "I_THREATENED_THEM"       # I chose [Threaten]
+INTERACTION_TYPE_FLED_FROM_ME = "FLED_FROM_ME"               # They chose [Flee]
+INTERACTION_TYPE_I_FLED_FROM_THEM = "I_FLED_FROM_THEM"         # I chose [Flee]
+INTERACTION_TYPE_OFFERED_GIFT_TO_ME = "OFFERED_GIFT_TO_ME"     # They chose [Offer_Gift]
+INTERACTION_TYPE_I_OFFERED_GIFT_TO_THEM = "I_OFFERED_GIFT_TO_THEM" # I chose [Offer_Gift]
+INTERACTION_TYPE_ASKED_FOR_HELP_FROM_ME = "ASKED_FOR_HELP_FROM_ME" # They chose [Ask_For_Help]
+INTERACTION_TYPE_I_ASKED_FOR_HELP_FROM_THEM = "I_ASKED_FOR_HELP_FROM_THEM" # I chose [Ask_For_Help]
+
 # --- NPC Data Structure ---
 class Npc:
     def __init__(self, id, y, x, char, color_pair_index):
@@ -77,8 +103,30 @@ class Npc:
         self.encounter_submode = None; self.dialogue_turn_taker_id = None
         self.dialogue_history = []; self.dialogue_exchange_count = 0
 
-# --- Node, Heuristic, Path Reconstruction, A* ---
-class Node:
+    def get_or_initialize_relationship(self, target_npc_id):
+        if target_npc_id not in self.relationships:
+            self.relationships[target_npc_id] = {
+                'score': RELATIONSHIP_SCORE_NEUTRAL,
+                'last_interaction_type': None,
+                'interaction_count': 0
+            }
+        elif 'interaction_count' not in self.relationships[target_npc_id]:
+             self.relationships[target_npc_id]['interaction_count'] = 0
+        if 'last_interaction_type' not in self.relationships[target_npc_id]:
+             self.relationships[target_npc_id]['last_interaction_type'] = None
+        return self.relationships[target_npc_id]
+
+    def update_relationship_towards(self, target_npc_id, score_change, interaction_type_string):
+        rel = self.get_or_initialize_relationship(target_npc_id)
+        old_score = rel['score'] # Capture old score before updating
+        new_score = old_score + score_change
+        rel['score'] = max(RELATIONSHIP_SCORE_MIN, min(RELATIONSHIP_SCORE_MAX, new_score))
+        rel['last_interaction_type'] = interaction_type_string
+        rel['interaction_count'] += 1
+        print(f"LOG_REL: NPC {self.id} -> NPC {target_npc_id}: Score {old_score}({'+' if score_change >=0 else ''}{score_change})->{rel['score']}, LastInt: '{rel['last_interaction_type']}', Count: {rel['interaction_count']}")
+
+# --- Node, Heuristic, Path Reconstruction, A* (remain the same) ---
+class Node: # ...
     def __init__(self, position, parent=None, g=0, h=0):
         self.position = position; self.parent = parent; self.g = g; self.h = h; self.f = g + h
     def __eq__(self, other): return self.position == other.position
@@ -90,7 +138,7 @@ def reconstruct_path(current_node):
     path = [];
     while current_node: path.append(current_node.position); current_node = current_node.parent
     return path[::-1]
-def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles_map_chars=None):
+def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles_map_chars=None): # ...
     if walkable_tiles_map_chars is None:
         walkable_tiles_map_chars = GRASS_CHARS + FLOOR_CHARS + ['T']
         if DEFAULT_WALKABLE_REPLACEMENT_FOR_FEATURES not in walkable_tiles_map_chars:
@@ -118,8 +166,8 @@ def astar_pathfind(map_data, start_pos, end_pos, walkable_tiles_map_chars=None):
             heapq.heappush(open_list, neighbor_node); open_list_nodes[neighbor_pos] = neighbor_node
     return None
 
-# --- GameState Class ---
-class GameState:
+# --- GameState Class (remains the same) ---
+class GameState: # ...
     def __init__(self, map_data_strings, npc_definitions):
         self.map_data = []
         self.npcs = []
@@ -169,8 +217,8 @@ class GameState:
             processed_map_rows.append("".join(current_row_chars))
         self.map_data = processed_map_rows
 
-# --- Encounter Prompt Generation ---
-def generate_encounter_prompt(npc_self, npc_other, game_state, previous_ai_mode_for_prompt):
+# --- Encounter Prompt Generation (remains the same) ---
+def generate_encounter_prompt(npc_self, npc_other, game_state, previous_ai_mode_for_prompt): # ...
     energy_status = "high";
     if npc_self.energy < LOW_ENERGY_THRESHOLD: energy_status = "low"
     elif npc_self.energy < (NPC_MAX_ENERGY / 2): energy_status = "medium"
@@ -183,15 +231,54 @@ def generate_encounter_prompt(npc_self, npc_other, game_state, previous_ai_mode_
         elif previous_ai_mode_for_prompt == AI_MODE_SEEKING_RESOURCE: activity_description = f"seeking {npc_self.current_resource_target_type or 'resources'}"
         elif previous_ai_mode_for_prompt == AI_MODE_GATHERING_RESOURCE: activity_description = f"gathering {npc_self.current_resource_target_type or 'resources'}"
         elif previous_ai_mode_for_prompt == AI_MODE_SEEKING_REST: activity_description = "seeking rest"
+
+    # Relationship context
+    rel_data_self_to_other = npc_self.get_or_initialize_relationship(npc_other.id)
+    relationship_score = rel_data_self_to_other['score']
+    last_interaction = rel_data_self_to_other['last_interaction_type']
+    interaction_count = rel_data_self_to_other['interaction_count']
+    relationship_desc = get_relationship_descriptor(relationship_score)
+
+    relationship_context = f"Your current relationship with NPC {npc_other.id} ('{npc_other.char}') is '{relationship_desc}' (score: {relationship_score}). "
+    if interaction_count == 0:
+        relationship_context += "This is your first encounter. "
+    elif last_interaction:
+        relationship_context += f"Your last interaction with them was recorded as '{last_interaction}'. "
+    else:
+        relationship_context += "You have interacted before, but the specifics of the last interaction are unclear. "
+
     available_actions_for_prompt_list = ["[Talk]", "[Ignore]", "[Flee]", "[Threaten]"]
     action_options_str = "- [Talk] (Initiate a conversation)\n- [Ignore] (Disengage and try to continue your previous activity or find something new to do)\n- [Flee] (Quickly move away from this NPC)\n- [Threaten] (Issue a verbal threat or warning)\n"
     if any(v > 0 for v in npc_self.inventory.values()): available_actions_for_prompt_list.append("[Offer_Gift]"); action_options_str += "- [Offer_Gift] (Offer one of your items as a gift)\n"
     if energy_status == "low": available_actions_for_prompt_list.append("[Ask_For_Help]"); action_options_str += "- [Ask_For_Help] (Plead for assistance due to your low energy)\n"
-    prompt = (f"You are NPC {npc_self.id} ('{npc_self.char}'). Your defining personality trait is '{npc_self.personality}'. Let this trait heavily influence your decision. You were previously {activity_description}. Your energy is {energy_status}. You are carrying {inventory_summary}.\nYou have just encountered NPC {npc_other.id} ('{npc_other.char}'), who is known for a '{npc_other.personality}' personality.\n\nConsidering your '{npc_self.personality}' nature, what is your immediate reaction to encountering NPC {npc_other.id}? Choose ONE action from the following list: {', '.join(available_actions_for_prompt_list)}.\n{action_options_str}Respond with only the chosen action phrase (e.g., '[Talk]').")
+
+    prompt = (f"You are NPC {npc_self.id} ('{npc_self.char}'). Your defining personality trait is '{npc_self.personality}'. Let this trait heavily influence your decision. "
+              f"You were previously {activity_description}. Your energy is {energy_status}. You are carrying {inventory_summary}.\n"
+              f"You have just encountered NPC {npc_other.id} ('{npc_other.char}'), who is known for a '{npc_other.personality}' personality.\n"
+              f"{relationship_context}\n\n" # Inserted relationship context here
+              f"Considering your '{npc_self.personality}' nature AND this relationship history, what is your immediate reaction to encountering NPC {npc_other.id}? "
+              f"Choose ONE action from the following list: {', '.join(available_actions_for_prompt_list)}.\n{action_options_str}"
+              f"Respond with only the chosen action phrase (e.g., '[Talk]').")
+    # print(f"DEBUG_PROMPT_REL: Encounter prompt for NPC {npc_self.id} vs {npc_other.id}. Rel score: {relationship_score}, LastInt: {last_interaction}, Count: {interaction_count}. Context: {relationship_context.strip()}")
     return prompt
 def generate_dialogue_initiation_prompt(npc_speaker, npc_listener, game_state):
-    prompt = (f"You are NPC {npc_speaker.id} ('{npc_speaker.char}'). Your personality is '{npc_speaker.personality}'. You are initiating a conversation with NPC {npc_listener.id} ('{npc_listener.char}'), whose personality is '{npc_listener.personality}'.\nStaying true to your '{npc_speaker.personality}' character, what is your opening line or greeting? This is the very first thing said. Respond with only your single short sentence, without any action tags like [Talk].")
+    rel_data = npc_speaker.get_or_initialize_relationship(npc_listener.id)
+    last_general_interaction = rel_data.get('last_interaction_type')
+
+    prompt = (
+        f"You are NPC {npc_speaker.id} ('{npc_speaker.char}'). Your personality is '{npc_speaker.personality}'. "
+        f"You are initiating a conversation with NPC {npc_listener.id} ('{npc_listener.char}'), whose personality is '{npc_listener.personality}'. "
+    )
+    if last_general_interaction:
+        prompt += f"Prior to this decision to talk, your last notable interaction with them was '{last_general_interaction}'. "
+    prompt += (
+        f"\nStaying true to your '{npc_speaker.personality}' character, what is your opening line or greeting? "
+        f"This is the very first thing said. Respond with only your single short sentence, without any action tags like [Talk]."
+    )
+    # if last_general_interaction:
+        # print(f"DEBUG_PROMPT_REL: Dialogue initiation prompt for NPC {npc_speaker.id} to {npc_listener.id}. Last general interaction: '{last_general_interaction}'.")
     return prompt
+
 def generate_dialogue_response_prompt(npc_speaker, npc_listener, game_state, dialogue_history):
     history_str = "  (This is the beginning of the conversation.)\n"; npc_map = {npc.id: npc for npc in game_state.npcs}
     if dialogue_history:
@@ -200,11 +287,28 @@ def generate_dialogue_response_prompt(npc_speaker, npc_listener, game_state, dia
             speaker_id = entry['speaker_id']; s_npc_details = npc_map.get(speaker_id)
             speaker_char = s_npc_details.char if s_npc_details else '?'; s_personality = s_npc_details.personality if s_npc_details else "Unknown"
             history_str += f"  NPC {speaker_id} ({speaker_char}, {s_personality}): {entry['line']}\n"
-    prompt = (f"You are NPC {npc_speaker.id} ('{npc_speaker.char}'), and your personality is '{npc_speaker.personality}'. Reflect this '{npc_speaker.personality}' nature in your response.\nYou are conversing with NPC {npc_listener.id} ('{npc_listener.char}') (a '{npc_listener.personality}' individual).\nRecent conversation history (you are NPC {npc_speaker.id}, most recent line is last):\n{history_str}\nBased on the history and your personality, what is your response to the last line? Respond with only your single short sentence, without any action tags like [Talk].")
+
+    rel_data = npc_speaker.get_or_initialize_relationship(npc_listener.id)
+    last_general_interaction = rel_data.get('last_interaction_type')
+
+    prompt = (
+        f"You are NPC {npc_speaker.id} ('{npc_speaker.char}'), and your personality is '{npc_speaker.personality}'. "
+        f"Reflect this '{npc_speaker.personality}' nature in your response.\n"
+        f"You are conversing with NPC {npc_listener.id} ('{npc_listener.char}') (a '{npc_listener.personality}' individual). "
+    )
+    if last_general_interaction:
+        prompt += f"Remember, your last general interaction with them before this current talk was recorded as '{last_general_interaction}'. "
+    prompt += (
+        f"\nRecent conversation history (you are NPC {npc_speaker.id}, most recent line is last):\n{history_str}\n"
+        f"Based on the history and your personality, what is your response to the last line? "
+        f"Respond with only your single short sentence, without any action tags like [Talk]."
+    )
+    # if last_general_interaction:
+        # print(f"DEBUG_PROMPT_REL: Dialogue response prompt for NPC {npc_speaker.id} to {npc_listener.id}. Last general interaction: '{last_general_interaction}'.")
     return prompt
 
-# --- LLM Response Function (with enhanced error handling) ---
-def get_llm_encounter_response(prompt_string, npc_id, current_game_tick, context_type="action"):
+# --- LLM Response Function (remains the same) ---
+def get_llm_encounter_response(prompt_string, npc_id, current_game_tick, context_type="action"): # ...
     global USE_MOCK_LLM, OLLAMA_DEFAULT_MODEL, ollama_client_available, actual_ollama_call
     if USE_MOCK_LLM:
         if context_type == "init_dialogue": greetings = [f"Well met, NPC {npc_id}.", f"Greetings.", "What is it?", "A fine day."]; return random.choice(greetings)
@@ -212,56 +316,48 @@ def get_llm_encounter_response(prompt_string, npc_id, current_game_tick, context
         else: action_index = (current_game_tick // (ENCOUNTER_DURATION_TICKS // 3) + npc_id + random.randint(0,2)) % len(VALID_ENCOUNTER_ACTIONS) ; return VALID_ENCOUNTER_ACTIONS[action_index]
     else:
         if not ollama_client_available:
-            print(f"ERROR_LLM: NPC {npc_id} - Real LLM selected but ollama_client not available. Fallback mock for '{context_type}'.")
             if context_type == "init_dialogue": return "Hello (ollama_client missing)."
             if context_type == "response_dialogue": return "Indeed (ollama_client missing)."
             return "[Ignore]"
         try:
             model_to_use = OLLAMA_DEFAULT_MODEL
-            # print(f"LOG: NPC {npc_id} attempting REAL LLM call to {model_to_use} for context '{context_type}'. Prompt: {prompt_string[:100]}...")
             response = actual_ollama_call(prompt_string, model_name=model_to_use)
             llm_output_text = ""
             if isinstance(response, dict) and "response" in response: llm_output_text = response["response"].strip()
             elif isinstance(response, str): llm_output_text = response.strip()
             else:
-                print(f"LOG_ERROR_LLM: NPC {npc_id} received unexpected LLM response type: {type(response)}. Content: {str(response)[:200]}. Falling back for context '{context_type}'.")
                 if context_type == "init_dialogue": return "What? (fallback)"
                 if context_type == "response_dialogue": return "I don't understand that (fallback)."
                 return "[Ignore]"
             if not llm_output_text:
-                print(f"LOG_ERROR_LLM: NPC {npc_id} received empty response from LLM for context '{context_type}'. Falling back.")
                 if context_type == "init_dialogue": return "..."
                 if context_type == "response_dialogue": return "..."
                 return "[Ignore]"
             return llm_output_text
         except ImportError:
-            print(f"ERROR_LLM: NPC {npc_id} - ollama_client.py could not be imported (runtime check). Falling back for '{context_type}'.")
             if context_type == "init_dialogue": return "My voice module is offline (fallback)."
             if context_type == "response_dialogue": return "Can't talk now (fallback)."
             return "[Ignore]"
         except requests.exceptions.ConnectionError as e:
-            print(f"ERROR_LLM: NPC {npc_id} - Connection error for '{context_type}': {e}. Fallback.")
             if context_type == "init_dialogue": return "The ether is silent (fallback)."
             if context_type == "response_dialogue": return "Static on the line (fallback)."
             return "[Ignore]"
         except requests.exceptions.Timeout as e:
-            print(f"ERROR_LLM: NPC {npc_id} - Timeout for '{context_type}': {e}. Fallback.")
             if context_type == "init_dialogue": return "Took too long to think (fallback)."
             if context_type == "response_dialogue": return "My thoughts are slow (fallback)."
             return "[Ignore]"
         except requests.exceptions.RequestException as e:
-            print(f"ERROR_LLM: NPC {npc_id} - General request error for '{context_type}': {e}. Fallback.")
             if context_type == "init_dialogue": return "A cosmic ray interfered (fallback)."
             if context_type == "response_dialogue": return "Problem with request (fallback)."
             return "[Ignore]"
         except Exception as e:
-            print(f"ERROR_LLM: NPC {npc_id} - Unexpected error during LLM call or processing for context '{context_type}': {type(e).__name__} - {e}. Fallback.")
             if context_type == "init_dialogue": return "I'm speechless (fallback)."
             if context_type == "response_dialogue": return "I'm at a loss for words (fallback)."
             return "[Ignore]"
 
-# --- Drawing Function ---
-def draw_map(stdscr, game_state, color_pairs): # ... (remains the same) ...
+# --- Drawing Function (status display updated) ---
+def draw_map(stdscr, game_state, color_pairs):
+    # ... (drawing logic as before) ...
     for r, row_str in enumerate(game_state.map_data):
         for c, char_val in enumerate(row_str):
             color_pair_to_use = color_pairs.get('default', curses.color_pair(1)); display_char = char_val
@@ -285,6 +381,7 @@ def draw_map(stdscr, game_state, color_pairs): # ... (remains the same) ...
                     try: stdscr.addch(r_path, c_path, '.', color_pairs.get('path', curses.color_pair(1)))
                     except curses.error: pass
     for npc in game_state.npcs: try: stdscr.addch(npc.y, npc.x, npc.char, curses.color_pair(npc.color_pair_index)); except curses.error: pass
+
     for i, npc_to_display in enumerate(game_state.npcs[:min(curses.LINES - len(game_state.map_data) - 1, 3)]):
         status_line_y_pos = len(game_state.map_data) + i
         if status_line_y_pos < curses.LINES -1 :
@@ -293,12 +390,14 @@ def draw_map(stdscr, game_state, color_pairs): # ... (remains the same) ...
                 target_info = f"T:({npc_to_display.target_y},{npc_to_display.target_x})"
                 if npc_to_display.ai_mode == AI_MODE_SEEKING_RESOURCE and npc_to_display.current_resource_target_type: target_info += f" Res:{npc_to_display.current_resource_target_type[:3]}"
                 elif npc_to_display.ai_mode == AI_MODE_PATROLLING and _patrol_id_str: target_info += f" Pat:{_patrol_id_str[:7]}"
+
             path_info = f"P:{len(npc_to_display.path)}";mode_info_str = npc_to_display.ai_mode; pers_info = npc_to_display.personality[:4]
             llm_act_disp = npc_to_display.llm_parsed_action.strip("[]")[:4] if npc_to_display.llm_parsed_action else "...."
             submode_disp = ""
             if npc_to_display.encounter_submode == ENCOUNTER_SUBMODE_TALKING:
                 turn_char = "My" if npc_to_display.id == npc_to_display.dialogue_turn_taker_id else "Wt"
                 submode_disp = f"Talk({turn_char}{npc_to_display.dialogue_exchange_count // 2}/{MAX_DIALOGUE_EXCHANGES})"
+
             display_mode = mode_info_str
             if mode_info_str == AI_MODE_ROAMING: display_mode = "Roam"
             elif mode_info_str == AI_MODE_SEEKING_REST: display_mode = "SeekR"
@@ -308,11 +407,31 @@ def draw_map(stdscr, game_state, color_pairs): # ... (remains the same) ...
             elif mode_info_str == AI_MODE_PATROLLING: display_mode = f"Patrol({npc_to_display.current_patrol_waypoint_index})"
             elif mode_info_str == AI_MODE_ENCOUNTER:
                 display_mode = f"Enc{submode_disp}({llm_act_disp})[{npc_to_display.encounter_timer}]"
+
             energy_info = f"E:{int(npc_to_display.energy)}"
             inv_info = f"Inv(W:{npc_to_display.inventory['wood']},S:{npc_to_display.inventory['stone']})"
-            encounter_partner_info = f" EP:{npc_to_display.encounter_partner_id}" if npc_to_display.encounter_partner_id is not None and npc_to_display.ai_mode == AI_MODE_ENCOUNTER else ""
-            status_msg = f"N{npc_to_display.id}({npc_to_display.char} {pers_info})@({npc_to_display.y},{npc_to_display.x}) {target_info} {path_info} {energy_info} {inv_info} {display_mode}{encounter_partner_info}"
-            try: stdscr.move(status_line_y_pos, 0); stdscr.clrtoeol(); stdscr.addstr(status_line_y_pos, 0, status_msg[:curses.COLS-1])
+
+            encounter_partner_info_str = ""
+            if npc_to_display.ai_mode == AI_MODE_ENCOUNTER and npc_to_display.encounter_partner_id is not None:
+                encounter_partner_info_str = f" EP:{npc_to_display.encounter_partner_id}"
+                rel_data = npc_to_display.get_or_initialize_relationship(npc_to_display.encounter_partner_id)
+                current_rel_score = rel_data['score']
+                encounter_partner_info_str += f" RelS:{current_rel_score}"
+
+            general_rel_info_str = ""
+            # Display general relationship with first other NPC for simplicity, if relationships exist and not in encounter
+            if npc_to_display.ai_mode != AI_MODE_ENCOUNTER and npc_to_display.relationships:
+                for rel_id_key, rel_data_val in npc_to_display.relationships.items():
+                    if rel_id_key != npc_to_display.id: # Ensure it's not a self-relationship if that's possible
+                        rel_score_val = rel_data_val['score']
+                        rel_int_count = rel_data_val['interaction_count']
+                        general_rel_info_str = f" Rel({rel_id_key}):{rel_score_val}({rel_int_count})"
+                        break # Show first one only
+
+            status_msg = f"N{npc_to_display.id}({npc_to_display.char} {pers_info})@({npc_to_display.y},{npc_to_display.x}) {target_info} {path_info} {energy_info} {inv_info} {display_mode}{encounter_partner_info_str}{general_rel_info_str}"
+            try:
+                stdscr.move(status_line_y_pos, 0); stdscr.clrtoeol()
+                stdscr.addstr(status_line_y_pos, 0, status_msg[:curses.COLS-1])
             except curses.error: pass
 
 # --- Main Game Logic ---
@@ -320,6 +439,7 @@ loop_counter = 0
 def main(stdscr):
     global loop_counter, USE_MOCK_LLM, OLLAMA_DEFAULT_MODEL, ollama_client_available
     curses.curs_set(0); curses.start_color()
+    # ... (color_pairs and init_pair calls as before) ...
     color_pairs = {
         'default': curses.color_pair(1), 'grass': curses.color_pair(2), 'water_anim': curses.color_pair(3),
         'npc_yellow': curses.color_pair(4), 'wall': curses.color_pair(5), 'target': curses.color_pair(6),
@@ -373,20 +493,43 @@ def main(stdscr):
                         npc_a.detected_encounter_partner_id_this_tick = npc_b.id; npc_b.detected_encounter_partner_id_this_tick = npc_a.id
                         processed_encounter_pairs_this_tick.add(pair_key)
 
-        for npc in game_state.npcs:
+        for npc in game_state.npcs: # Main AI Loop for each NPC
             current_npc_log_prefix = f"N{npc.id}({npc.char} E:{int(npc.energy)} M:{npc.ai_mode[:7]} P:{npc.personality[:4]})"
             npc_is_effectively_idle = (npc.target_y is None and not npc.path)
             if npc.ai_mode != AI_MODE_RESTING and npc.energy > 0 : npc.energy = max(0, npc.energy - ENERGY_DEPLETION_RATE)
 
             # --- AI Mode Logic ---
             if npc.ai_mode == AI_MODE_ENCOUNTER:
-                # ... (Encounter logic from previous step, including dialogue initiation and response) ...
+                other_npc_for_rel = next((n for n in game_state.npcs if n.id == npc.encounter_partner_id), None)
+
                 if npc.llm_parsed_action is None and npc.llm_raw_response :
                     parsed_action = npc.llm_raw_response.strip()
-                    if parsed_action not in VALID_ENCOUNTER_ACTIONS: parsed_action = "[Ignore]"; # print(f"LOG: {current_npc_log_prefix} LLM response '{npc.llm_raw_response}' invalid. Defaulted to [Ignore].")
+                    if parsed_action not in VALID_ENCOUNTER_ACTIONS: parsed_action = "[Ignore]";
                     npc.llm_parsed_action = parsed_action; npc.llm_raw_response = None
-                    # print(f"LOG: {current_npc_log_prefix} Parsed LLM Action: {npc.llm_parsed_action}")
-                    if npc.llm_parsed_action == "[Talk]" and npc.encounter_submode is None:
+
+                    # --- Relationship Update based on initial action ---
+                    if other_npc_for_rel:
+                        if npc.llm_parsed_action == "[Talk]":
+                            npc.update_relationship_towards(other_npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_POSITIVE, INTERACTION_TYPE_I_TALKED_TO_THEM)
+                            other_npc.update_relationship_towards(npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_POSITIVE, INTERACTION_TYPE_TALKED_TO_BY_ME)
+                        elif npc.llm_parsed_action == "[Ignore]":
+                            npc.update_relationship_towards(other_npc.id, 0, INTERACTION_TYPE_I_IGNORED_THEM)
+                            other_npc.update_relationship_towards(npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_NEGATIVE, INTERACTION_TYPE_IGNORED_ME)
+                        elif npc.llm_parsed_action == "[Flee]":
+                            npc.update_relationship_towards(other_npc.id, 0, INTERACTION_TYPE_I_FLED_FROM_THEM)
+                            other_npc.update_relationship_towards(npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_NEGATIVE, INTERACTION_TYPE_FLED_FROM_ME)
+                        elif npc.llm_parsed_action == "[Threaten]":
+                            npc.update_relationship_towards(other_npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_NEGATIVE, INTERACTION_TYPE_I_THREATENED_THEM)
+                            other_npc.update_relationship_towards(npc.id, STRONG_RELATIONSHIP_SCORE_CHANGE_NEGATIVE, INTERACTION_TYPE_THREATENED_ME)
+                        elif npc.llm_parsed_action == "[Offer_Gift]":
+                            npc.update_relationship_towards(other_npc.id, DEFAULT_RELATIONSHIP_SCORE_CHANGE_POSITIVE, INTERACTION_TYPE_I_OFFERED_GIFT_TO_THEM) # Assume gift is always positive for giver's intent for now
+                            other_npc.update_relationship_towards(npc.id, STRONG_RELATIONSHIP_SCORE_CHANGE_POSITIVE, INTERACTION_TYPE_OFFERED_GIFT_TO_ME)
+                        elif npc.llm_parsed_action == "[Ask_For_Help]":
+                            npc.update_relationship_towards(other_npc.id, 0, INTERACTION_TYPE_I_ASKED_FOR_HELP_FROM_THEM)
+                            other_npc.update_relationship_towards(npc.id, 0, INTERACTION_TYPE_ASKED_FOR_HELP_FROM_ME) # Score might change based on if help is given
+
+                    # ... (rest of encounter action handling: Talk initiation, Ignore, Flee, etc.) ...
+                    if npc.llm_parsed_action == "[Talk]" and npc.encounter_submode is None: # ...
                         npc.encounter_submode = ENCOUNTER_SUBMODE_TALKING
                         other_npc = next((n for n in game_state.npcs if n.id == npc.encounter_partner_id), None)
                         if other_npc:
@@ -402,9 +545,9 @@ def main(stdscr):
                             npc.dialogue_exchange_count+=1; other_npc.dialogue_exchange_count = npc.dialogue_exchange_count
                             npc.dialogue_turn_taker_id = other_npc.id; other_npc.dialogue_turn_taker_id = other_npc.id
                             npc.encounter_timer = ENCOUNTER_DURATION_TICKS
-                        else: npc.llm_parsed_action = "[Ignore]"
+                        else: npc.llm_parsed_action = "[Ignore]" # Should already be set if other_npc is None
                     if npc.llm_parsed_action == "[Ignore]": npc.encounter_timer = 0
-                    elif npc.llm_parsed_action == "[Flee]":
+                    elif npc.llm_parsed_action == "[Flee]": # Flee already sets timer to 0 and changes mode
                         other_npc = next((n for n in game_state.npcs if n.id == npc.encounter_partner_id), None); flee_target_y, flee_target_x = npc.y, npc.x
                         if other_npc:
                             if other_npc.y < npc.y: flee_target_y = min(len(game_state.map_data) - 1, npc.y + 3)
@@ -412,43 +555,52 @@ def main(stdscr):
                             if other_npc.x < npc.x: flee_target_x = min(len(game_state.map_data[0]) - 1, npc.x + 3)
                             else: flee_target_x = max(0, npc.x - 3)
                         npc.target_y, npc.target_x = flee_target_y, flee_target_x ; npc.path = []
-                        npc.encounter_timer = 0;
+                        # This state change now happens in the timer check block
+                        # npc.encounter_timer = 0; npc.ai_mode = AI_MODE_ROAMING; npc.encounter_partner_id = None
                     elif npc.llm_parsed_action == "[Threaten]": npc.encounter_timer = max(1, ENCOUNTER_DURATION_TICKS // 2)
                     elif npc.llm_parsed_action == "[Offer_Gift]" and npc.encounter_submode != ENCOUNTER_SUBMODE_TALKING : npc.encounter_timer = ENCOUNTER_DURATION_TICKS
                     elif npc.llm_parsed_action == "[Ask_For_Help]" and npc.encounter_submode != ENCOUNTER_SUBMODE_TALKING : npc.encounter_timer = ENCOUNTER_DURATION_TICKS
 
-                if npc.encounter_submode == ENCOUNTER_SUBMODE_TALKING and npc.id == npc.dialogue_turn_taker_id:
+                if npc.encounter_submode == ENCOUNTER_SUBMODE_TALKING and npc.id == npc.dialogue_turn_taker_id: # ... (dialogue turn taking)
                     other_npc = next((n for n in game_state.npcs if n.id == npc.encounter_partner_id), None)
                     if not other_npc or npc.dialogue_exchange_count >= MAX_DIALOGUE_EXCHANGES * 2 :
-                        if other_npc: print(f"DIALOGUE_EVENT: NPC {npc.id} and {other_npc.id} reached MAX_DIALOGUE_EXCHANGES ({npc.dialogue_exchange_count}/{MAX_DIALOGUE_EXCHANGES*2}). Ending dialogue.")
                         npc.encounter_timer = 0
                         if other_npc: other_npc.encounter_timer = 0; other_npc.encounter_submode = None; other_npc.dialogue_turn_taker_id = None; other_npc.encounter_partner_id = None; other_npc.dialogue_history=[]; other_npc.dialogue_exchange_count = 0
                     elif len(npc.dialogue_history) > 0 and npc.dialogue_history[-1]['speaker_id'] != npc.id :
-                        # print(f"DIALOGUE_EVENT: Turn for NPC {npc.id} to speak to {other_npc.id if other_npc else 'None'} (Exchange: { (npc.dialogue_exchange_count // 2) + 1 })")
                         response_prompt = generate_dialogue_response_prompt(npc, other_npc, game_state, npc.dialogue_history)
                         response_line = get_llm_encounter_response(response_prompt, npc.id, game_state.game_tick_counter, context_type="response_dialogue")
                         response_line = response_line.strip().replace('[', '').replace(']', '')
-                        print(f"DIALOGUE: NPC {npc.id} (to {other_npc.id if other_npc else 'None'}): {response_line}")
                         npc.dialogue_history.append({'speaker_id': npc.id, 'line': response_line})
                         npc.dialogue_exchange_count += 1;
                         if other_npc: other_npc.dialogue_exchange_count = npc.dialogue_exchange_count
-                        # print(f"LOG: {current_npc_log_prefix} completed exchange {npc.dialogue_exchange_count}. Passing turn.")
                         if other_npc: npc.dialogue_turn_taker_id = other_npc.id; other_npc.dialogue_turn_taker_id = other_npc.id
                         else: npc.encounter_timer = 0
                         npc.encounter_timer = ENCOUNTER_DURATION_TICKS;
                         if other_npc: other_npc.encounter_timer = ENCOUNTER_DURATION_TICKS
 
                 if npc.encounter_timer > 0: npc.encounter_timer -= 1
-                else:
-                    prev_partner = npc.encounter_partner_id
-                    npc.encounter_partner_id = None ; npc.target_y, npc.target_x, npc.path = None,None,[]; npc.previous_ai_mode = None; npc.llm_parsed_action = None; npc.llm_raw_response = None; npc.encounter_submode = None; npc.dialogue_history = []; npc.dialogue_exchange_count = 0; npc.dialogue_turn_taker_id = None
-                    other_npc_obj = next((n for n in game_state.npcs if n.id == prev_partner), None)
-                    if other_npc_obj: other_npc_obj.encounter_timer = 0; other_npc_obj.encounter_submode = None; other_npc_obj.encounter_partner_id = None; other_npc_obj.dialogue_turn_taker_id = None; other_npc_obj.dialogue_history = []; other_npc_obj.dialogue_exchange_count = 0; other_npc_obj.llm_parsed_action = None; other_npc_obj.llm_raw_response = None
-                    log_suffix = f"after enc with {prev_partner}."
-                    if npc.interrupted_patrol_path_id is not None: npc.ai_mode = AI_MODE_PATROLLING; npc.patrol_path_id = npc.interrupted_patrol_path_id; npc.current_patrol_waypoint_index = npc.interrupted_waypoint_index; npc.interrupted_patrol_path_id, npc.interrupted_waypoint_index = None,0; # print(f"{current_npc_log_prefix} resuming PATROL {log_suffix}")
-                    elif npc.patrol_path_id: npc.ai_mode = AI_MODE_PATROLLING; # print(f"{current_npc_log_prefix} starting PATROL {log_suffix}")
-                    else: npc.ai_mode = AI_MODE_ROAMING; # print(f"{current_npc_log_prefix} now ROAMING {log_suffix}")
+                else: # Encounter timer ran out or was set to 0 by an action
+                    prev_partner_id = npc.encounter_partner_id # Store before clearing
+                    # Reset all encounter/dialogue related states for this NPC
+                    npc.encounter_partner_id = None ; npc.target_y, npc.target_x, npc.path = None,None,[];
+                    npc.previous_ai_mode = None; npc.llm_parsed_action = None; npc.llm_raw_response = None;
+                    npc.encounter_submode = None; npc.dialogue_history = []; npc.dialogue_exchange_count = 0; npc.dialogue_turn_taker_id = None
+
+                    # Ensure other NPC also exits dialogue/encounter state if this one timed out
+                    other_npc_obj = next((n for n in game_state.npcs if n.id == prev_partner_id), None)
+                    if other_npc_obj:
+                        other_npc_obj.encounter_timer = 0; other_npc_obj.encounter_submode = None;
+                        other_npc_obj.encounter_partner_id = None; other_npc_obj.dialogue_turn_taker_id = None;
+                        other_npc_obj.dialogue_history = []; other_npc_obj.dialogue_exchange_count = 0;
+                        other_npc_obj.llm_parsed_action = None; other_npc_obj.llm_raw_response = None
+                        # print(f"LOG: NPC {other_npc_obj.id} also exiting encounter due to NPC {npc.id} timer out/action.")
+
+                    log_suffix = f"after enc with {prev_partner_id}."
+                    if npc.interrupted_patrol_path_id is not None: npc.ai_mode = AI_MODE_PATROLLING; npc.patrol_path_id = npc.interrupted_patrol_path_id; npc.current_patrol_waypoint_index = npc.interrupted_waypoint_index; npc.interrupted_patrol_path_id, npc.interrupted_waypoint_index = None,0;
+                    elif npc.patrol_path_id: npc.ai_mode = AI_MODE_PATROLLING;
+                    else: npc.ai_mode = AI_MODE_ROAMING;
                 if npc.ai_mode == AI_MODE_ENCOUNTER and npc.encounter_timer > 0: continue
+            # ... (Rest of AI logic as before) ...
             elif npc.ai_mode == AI_MODE_RESTING: # ...
                  npc.energy = min(NPC_MAX_ENERGY, npc.energy + ENERGY_REPLENISH_RATE)
                  if npc.energy >= NPC_MAX_ENERGY: npc.target_y,npc.target_x,npc.path = None,None,[]; npc.previous_ai_mode = None
@@ -466,14 +618,13 @@ def main(stdscr):
                     if other_npc_obj:
                         prompt = generate_encounter_prompt(npc, other_npc_obj, game_state, npc.previous_ai_mode)
                         npc.llm_raw_response = get_llm_encounter_response(prompt, npc.id, game_state.game_tick_counter, context_type="action")
-                        # print(f"LOG: {current_npc_log_prefix} entered ENCOUNTER with {npc.encounter_partner_id}. PrevM: {npc.previous_ai_mode}. LLM_Raw: '{npc.llm_raw_response}'")
                     if npc.ai_mode == AI_MODE_ENCOUNTER : continue
             elif npc.energy < LOW_ENERGY_THRESHOLD and npc.ai_mode != AI_MODE_SEEKING_REST : # Low Energy
                 npc.previous_ai_mode = npc.ai_mode; interrupted_task_for_energy = False
                 if npc.ai_mode == AI_MODE_PATROLLING and npc.patrol_path_id: npc.interrupted_patrol_path_id = npc.patrol_path_id; npc.interrupted_waypoint_index = npc.current_patrol_waypoint_index; npc.patrol_path_id = None; interrupted_task_for_energy=True
                 elif npc.ai_mode in [AI_MODE_SEEKING_RESOURCE, AI_MODE_GATHERING_RESOURCE]: interrupted_task_for_energy = True
                 elif npc.ai_mode == AI_MODE_ENCOUNTER : interrupted_task_for_energy = True; other_npc = next((n for n in game_state.npcs if n.id == npc.encounter_partner_id), None);
-                    if other_npc: print(f"DIALOGUE_EVENT: NPC {npc.id} interrupting dialogue with {other_npc.id} due to low energy. Both exiting dialogue."); other_npc.encounter_timer = 0; other_npc.encounter_submode = None; other_npc.dialogue_turn_taker_id = None; other_npc.encounter_partner_id = None; other_npc.dialogue_history = []; other_npc.dialogue_exchange_count=0; other_npc.llm_parsed_action=None; other_npc.llm_raw_response=None; other_npc.ai_mode = AI_MODE_ROAMING
+                    if other_npc: other_npc.encounter_timer = 0; other_npc.encounter_submode = None; other_npc.dialogue_turn_taker_id = None; other_npc.encounter_partner_id = None; other_npc.dialogue_history = []; other_npc.dialogue_exchange_count=0; other_npc.llm_parsed_action=None; other_npc.llm_raw_response=None; other_npc.ai_mode = AI_MODE_ROAMING
                     npc.encounter_submode = None; npc.dialogue_history = []; npc.dialogue_turn_taker_id = None; npc.encounter_partner_id = None; npc.llm_parsed_action = None; npc.llm_raw_response = None
                 npc.ai_mode = AI_MODE_SEEKING_REST; npc.target_y,npc.target_x,npc.path = None,None,[]; npc.current_resource_target_type = None; npc.gathering_timer = 0;
             elif npc.ai_mode == AI_MODE_SEEKING_REST: # ...
